@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(uuid()) @db.Uuid
+  email                String   @unique
+  password             String
+  tipo                 UserTipo
+  nombre               String
+  apellido             String
+  dni                  String   @unique
+  ciudad               String
+  celular              String
+  domicilio            String
+  estudio              String?
+  foto_perfil          String?  @db.Text
+  numero_matricula     String?  @unique
+  estado               UserEstado
+  estado_pago          EstadoPago
+  monto_deuda          Int?
+  fecha_vencimiento    String?
+  fecha_ultimo_pago    String?
+  instagram            String?
+  facebook             String?
+  pagina_web           String?
+  linkedin             String?
+  behance              String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  notificaciones       Notificacion[]
+
+  @@map("users")
+}
+
+model Notificacion {
+  id         String      @id @default(uuid()) @db.Uuid
+  user_id    String      @db.Uuid
+  titulo     String
+  mensaje    String
+  fecha      DateTime    @default(now())
+  leida      Boolean     @default(false)
+  tipo       NotifTipo
+
+  user       User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notificaciones")
+}
+
+model ConfiguracionSistema {
+  id                      String   @id @default(uuid()) @db.Uuid
+  precio_matricula        Int      @default(15000)
+  fecha_inicio_pago       String
+  fecha_vencimiento_pago  String
+  updated_at              DateTime @updatedAt
+
+  @@map("configuracion_sistema")
+}
+
+model ContenidoWeb {
+  id                String   @id @default(uuid()) @db.Uuid
+  home_content      Json     @default("{}")
+  dashboard_content Json     @default("{}")
+  updated_at        DateTime @updatedAt
+
+  @@map("contenido_web")
+}
+
+enum UserTipo {
+  matriculado
+  administrador
+}
+
+enum UserEstado {
+  activo
+  suspendido
+  baja
+}
+
+enum EstadoPago {
+  al_dia
+  deuda
+}
+
+enum NotifTipo {
+  info
+  warning
+  success
+  error
+}
