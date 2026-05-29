@@ -13,8 +13,8 @@ export const env = {
   appSecret: required("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl: required("DATABASE_URL"),
-  kimiAuthUrl: required("KIMI_AUTH_URL"),
-  kimiOpenUrl: required("KIMI_OPEN_URL"),
+  authUrl: required("AUTH_URL"),
+  openUrl: required("OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
   jwtSecret: process.env.JWT_SECRET ?? "portal-matriculados-secret-key-2024",
 };
