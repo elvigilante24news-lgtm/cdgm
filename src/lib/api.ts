@@ -1,8 +1,6 @@
 import type { User, Notificacion, ConfiguracionSistema } from '@/types';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'https://cdgm-production.up.railway.app';
-
-// ─── Generic HTTP client ───────────────────────────────────────────────────────
+const API_BASE = (import.meta.env.VITE_API_URL ?? 'https://cdgm-production.up.railway.app') + '/api';
 
 async function request<T>(
   path: string,
@@ -21,8 +19,6 @@ async function request<T>(
   if (res.status === 204) return undefined as T;
   return res.json();
 }
-
-// ─── Mappers: DB (snake_case) → Frontend (camelCase) ──────────────────────────
 
 export function mapUser(raw: any): User {
   return {
@@ -78,7 +74,6 @@ export function mapConfig(raw: any): ConfiguracionSistema {
   };
 }
 
-// Frontend (camelCase) → DB (snake_case) for PUT/PATCH requests
 export function mapUserToAPI(userData: Partial<User>): Record<string, any> {
   const r: Record<string, any> = {};
   if (userData.nombre !== undefined) r.nombre = userData.nombre;
@@ -101,8 +96,6 @@ export function mapUserToAPI(userData: Partial<User>): Record<string, any> {
   return r;
 }
 
-// ─── Auth API ─────────────────────────────────────────────────────────────────
-
 export const authApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {
@@ -121,71 +114,51 @@ export const authApi = {
     ),
 };
 
-// ─── Users API ────────────────────────────────────────────────────────────────
-
 export const usersApi = {
   getAll: (token: string) =>
-    request<any[]>('/users', { method: 'GET' }, token),
+    request<any[]>('/usuarios', { method: 'GET' }, token),
 
   create: (token: string, data: Record<string, any>) =>
-    request<any>('/users', { method: 'POST', body: JSON.stringify(data) }, token),
+    request<any>('/usuarios', { method: 'POST', body: JSON.stringify(data) }, token),
 
   update: (token: string, id: string, data: Record<string, any>) =>
-    request<any>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }, token),
+    request<any>(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }, token),
 
   updateEstado: (token: string, id: string, estado: string) =>
     request<any>(
-      `/users/${id}/estado`,
+      `/usuarios/${id}/estado`,
       { method: 'PATCH', body: JSON.stringify({ estado }) },
       token
     ),
 
-  updatePago: (
-    token: string,
-    id: string,
-    data: { estado_pago: string; monto_deuda?: number }
-  ) =>
+  updatePago: (token: string, id: string, data: { estado_pago: string; monto_deuda?: number }) =>
     request<any>(
-      `/users/${id}/pago`,
+      `/usuarios/${id}/pago`,
       { method: 'PATCH', body: JSON.stringify(data) },
       token
     ),
 
-  sendNotificacion: (
-    token: string,
-    id: string,
-    data: { titulo: string; mensaje: string; tipo: string }
-  ) =>
+  sendNotificacion: (token: string, id: string, data: { titulo: string; mensaje: string; tipo: string }) =>
     request<any>(
-      `/users/${id}/notificaciones`,
-      { method: 'POST', body: JSON.stringify(data) },
+      `/notificaciones`,
+      { method: 'POST', body: JSON.stringify({ user_id: id, ...data }) },
       token
     ),
 
-  marcarNotifLeida: (token: string, userId: string, notifId: string) =>
+  marcarNotifLeida: (token: string, _userId: string, notifId: string) =>
     request<any>(
-      `/users/${userId}/notificaciones/${notifId}/leer`,
+      `/notificaciones/${notifId}/leer`,
       { method: 'PATCH' },
       token
     ),
 };
 
-// ─── Config API ───────────────────────────────────────────────────────────────
-
 export const configApi = {
-  get: (token: string) => request<any>('/config', { method: 'GET' }, token),
+  get: (token: string) => request<any>('/configuracion', { method: 'GET' }, token),
 
-  update: (
-    token: string,
-    data: {
-      precio_matricula?: number;
-      fecha_inicio_pago?: string;
-      fecha_vencimiento_pago?: string;
-    }
-  ) => request<any>('/config', { method: 'PUT', body: JSON.stringify(data) }, token),
+  update: (token: string, data: { precio_matricula?: number; fecha_inicio_pago?: string; fecha_vencimiento_pago?: string }) =>
+    request<any>('/configuracion', { method: 'PUT', body: JSON.stringify(data) }, token),
 };
-
-// ─── Contenido API ────────────────────────────────────────────────────────────
 
 export const contenidoApi = {
   get: () =>
@@ -194,8 +167,6 @@ export const contenidoApi = {
   update: (token: string, data: { home_content?: any; dashboard_content?: any }) =>
     request<any>('/contenido', { method: 'PUT', body: JSON.stringify(data) }, token),
 };
-
-// ─── Directorio API (public) ──────────────────────────────────────────────────
 
 export const directorioApi = {
   get: () => request<any[]>('/directorio', { method: 'GET' }),
