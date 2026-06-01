@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, FileText, ArrowRight, CheckCircle, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { LoginModal } from '@/components/modals/LoginModal';
 import cdgmLogo from '@/assets/cdgm-logo.png';
@@ -56,7 +57,7 @@ export default function HomePage() {
               <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="text-lg text-gray-600 mb-8 max-w-lg">{hero.description}</motion.p>
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="flex flex-wrap gap-4">
                 <Button onClick={() => setIsLoginOpen(true)} size="lg" className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white px-8">{hero.primaryButtonText}<ArrowRight className="w-5 h-5 ml-2" /></Button>
-                <a href="/#/directorio"><Button variant="outline" size="lg" className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9] hover:text-white"><Users className="w-5 h-5 mr-2" />{hero.secondaryButtonText}</Button></a>
+                <Link to="/directorio"><Button variant="outline" size="lg" className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9] hover:text-white"><Users className="w-5 h-5 mr-2" />{hero.secondaryButtonText}</Button></Link>
               </motion.div>
             </motion.div>
 

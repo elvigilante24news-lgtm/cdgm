@@ -1,25 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { contenidoApi } from '@/lib/api';
 
 export interface HomeContent {
   hero: {
-    badge: string;
-    title: string;
-    highlightText: string;
-    subtitle: string;
-    description: string;
-    primaryButtonText: string;
-    secondaryButtonText: string;
+    badge: string; title: string; highlightText: string;
+    subtitle: string; description: string;
+    primaryButtonText: string; secondaryButtonText: string;
   };
   previewCards: {
     matricula: { title: string; subtitle: string };
     profesionales: { title: string; subtitle: string };
     tarifario: { title: string; subtitle: string };
   };
-  footer: {
-    description: string;
-    email: string;
-    direccion: string;
-  };
+  footer: { description: string; email: string; direccion: string };
 }
 
 export interface DashboardContent {
@@ -56,7 +49,7 @@ const defaultHomeContent: HomeContent = {
     secondaryButtonText: 'Ver Directorio',
   },
   previewCards: {
-    matricula: { title: '​Sistema de Matrículas Profesionales ', subtitle: 'Colegio de Diseñadores Gráficos de Misiones' },
+    matricula: { title: 'Sistema de Matrículas Profesionales', subtitle: 'Colegio de Diseñadores Gráficos de Misiones' },
     profesionales: { title: 'Profesionales', subtitle: '500+ matriculados' },
     tarifario: { title: 'Acceso al Tarifario para Profesionales', subtitle: 'Valores actualizados' },
   },
@@ -80,59 +73,117 @@ const defaultDashboardContent: DashboardContent = {
 
 const ContentContext = createContext<ContentContextType | undefined>(undefined);
 
-const HOME_VERSION = '3';
-const DASH_VERSION = '2';
+// Save content to API (reads token from localStorage)
+async function saveToAPI(home: HomeContent, dash: DashboardContent) {
+  const token = localStorage.getItem('cdg_token');
+  if (!token) return;
+  try {
+    await contenidoApi.update(token, {
+      home_content: home,
+      dashboard_content: dash,
+    });
+  } catch (err) {
+    console.error('Error saving content:', err);
+  }
+}
 
 export function ContentProvider({ children }: { children: React.ReactNode }) {
-  const [homeContent, setHomeContent] = useState<HomeContent>(() => {
-    try {
-      const ver = localStorage.getItem('cdg_home_version');
-      if (ver !== HOME_VERSION) {
-        localStorage.removeItem('cdg_home_content');
-        localStorage.setItem('cdg_home_version', HOME_VERSION);
-        return defaultHomeContent;
-      }
-      const stored = localStorage.getItem('cdg_home_content');
-      return stored ? JSON.parse(stored) : defaultHomeContent;
-    } catch {
-      return defaultHomeContent;
-    }
-  });
+  const [homeContent, setHomeContent] = useState<HomeContent>(defaultHomeContent);
+  const [dashboardContent, setDashboardContent] = useState<DashboardContent>(defaultDashboardContent);
+  const [loaded, setLoaded] = useState(false);
 
-  const [dashboardContent, setDashboardContent] = useState<DashboardContent>(() => {
-    try {
-      const ver = localStorage.getItem('cdg_dash_version');
-      if (ver !== DASH_VERSION) {
-        localStorage.removeItem('cdg_dashboard_content');
-        localStorage.setItem('cdg_dash_version', DASH_VERSION);
-        return defaultDashboardContent;
-      }
-      const stored = localStorage.getItem('cdg_dashboard_content');
-      return stored ? JSON.parse(stored) : defaultDashboardContent;
-    } catch {
-      return defaultDashboardContent;
-    }
-  });
+  // Load content from API on mount
+  useEffect(() => {
+    contenidoApi.get()
+      .then((data) => {
+        if (data?.home_content && Object.keys(data.home_content).length > 0) {
+          setHomeContent({ ...defaultHomeContent, ...data.home_content });
+        }
+        if (data?.dashboard_content && Object.keys(data.dashboard_content).length > 0) {
+          setDashboardContent({ ...defaultDashboardContent, ...data.dashboard_content });
+        }
+      })
+      .catch(() => {
+        // API unavailable — fall back to localStorage
+        try {
+          const h = localStorage.getItem('cdg_home_content');
+          const d = localStorage.getItem('cdg_dashboard_content');
+          if (h) setHomeContent(JSON.parse(h));
+          if (d) setDashboardContent(JSON.parse(d));
+        } catch { /* ignore */ }
+      })
+      .finally(() => setLoaded(true));
+  }, []);
+
+  // Persist to localStorage as fallback cache
+  useEffect(() => {
+    if (loaded) localStorage.setItem('cdg_home_content', JSON.stringify(homeContent));
+  }, [homeContent, loaded]);
 
   useEffect(() => {
-    localStorage.setItem('cdg_home_content', JSON.stringify(homeContent));
-  }, [homeContent]);
+    if (loaded) localStorage.setItem('cdg_dashboard_content', JSON.stringify(dashboardContent));
+  }, [dashboardContent, loaded]);
 
-  useEffect(() => {
-    localStorage.setItem('cdg_dashboard_content', JSON.stringify(dashboardContent));
-  }, [dashboardContent]);
+  const updateHomeContent = (content: Partial<HomeContent>) => {
+    setHomeContent(prev => {
+      const next = { ...prev, ...content };
+      saveToAPI(next, dashboardContent);
+      return next;
+    });
+  };
 
-  const updateHomeContent = (content: Partial<HomeContent>) => setHomeContent(prev => ({ ...prev, ...content }));
-  const updateDashboardContent = (content: Partial<DashboardContent>) => setDashboardContent(prev => ({ ...prev, ...content }));
-  const updateHomeHero = (hero: Partial<HomeContent['hero']>) => setHomeContent(prev => ({ ...prev, hero: { ...prev.hero, ...hero } }));
-  const updateHomePreviewCards = (cards: Partial<HomeContent['previewCards']>) => setHomeContent(prev => ({ ...prev, previewCards: { ...prev.previewCards, ...cards } }));
-  const updateHomeFooter = (footer: Partial<HomeContent['footer']>) => setHomeContent(prev => ({ ...prev, footer: { ...prev.footer, ...footer } }));
-  const updateDashboardWelcome = (welcome: Partial<DashboardContent['welcome']>) => setDashboardContent(prev => ({ ...prev, welcome: { ...prev.welcome, ...welcome } }));
-  const updateDashboardCards = (cards: Partial<DashboardContent['cards']>) => setDashboardContent(prev => ({ ...prev, cards: { ...prev.cards, ...cards } }));
+  const updateDashboardContent = (content: Partial<DashboardContent>) => {
+    setDashboardContent(prev => {
+      const next = { ...prev, ...content };
+      saveToAPI(homeContent, next);
+      return next;
+    });
+  };
+
+  const updateHomeHero = (hero: Partial<HomeContent['hero']>) => {
+    setHomeContent(prev => {
+      const next = { ...prev, hero: { ...prev.hero, ...hero } };
+      saveToAPI(next, dashboardContent);
+      return next;
+    });
+  };
+
+  const updateHomePreviewCards = (cards: Partial<HomeContent['previewCards']>) => {
+    setHomeContent(prev => {
+      const next = { ...prev, previewCards: { ...prev.previewCards, ...cards } };
+      saveToAPI(next, dashboardContent);
+      return next;
+    });
+  };
+
+  const updateHomeFooter = (footer: Partial<HomeContent['footer']>) => {
+    setHomeContent(prev => {
+      const next = { ...prev, footer: { ...prev.footer, ...footer } };
+      saveToAPI(next, dashboardContent);
+      return next;
+    });
+  };
+
+  const updateDashboardWelcome = (welcome: Partial<DashboardContent['welcome']>) => {
+    setDashboardContent(prev => {
+      const next = { ...prev, welcome: { ...prev.welcome, ...welcome } };
+      saveToAPI(homeContent, next);
+      return next;
+    });
+  };
+
+  const updateDashboardCards = (cards: Partial<DashboardContent['cards']>) => {
+    setDashboardContent(prev => {
+      const next = { ...prev, cards: { ...prev.cards, ...cards } };
+      saveToAPI(homeContent, next);
+      return next;
+    });
+  };
 
   return (
     <ContentContext.Provider value={{
-      homeContent, dashboardContent, updateHomeContent, updateDashboardContent,
+      homeContent, dashboardContent,
+      updateHomeContent, updateDashboardContent,
       updateHomeHero, updateHomePreviewCards, updateHomeFooter,
       updateDashboardWelcome, updateDashboardCards,
     }}>
@@ -143,8 +194,6 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
 
 export const useContent = () => {
   const context = useContext(ContentContext);
-  if (context === undefined) {
-    throw new Error('useContent must be used within a ContentProvider');
-  }
+  if (context === undefined) throw new Error('useContent must be used within a ContentProvider');
   return context;
 };
