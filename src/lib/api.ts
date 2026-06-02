@@ -2,6 +2,9 @@ import type { User, Notificacion, ConfiguracionSistema } from '@/types';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? 'https://cdgm-production.up.railway.app') + '/api';
 
+// ─── Generic HTTP client ───────────────────────────────────────────────────────
+// Unwraps { success, data } or { success, usuario } or returns raw if already array/primitive
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -14,11 +17,30 @@ async function request<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || err.error || `Error ${res.status}`);
+    throw new Error(err.message || err.error || `Endpoint no encontrado`);
   }
   if (res.status === 204) return undefined as T;
-  return res.json();
+
+  const json = await res.json();
+
+  // Unwrap common API wrapper patterns: { success, data }, { success, usuario }, etc.
+  if (json && typeof json === 'object' && !Array.isArray(json) && 'success' in json) {
+    if ('data' in json) return json.data as T;
+    if ('usuario' in json) return json.usuario as T;
+    if ('usuarios' in json) return json.usuarios as T;
+    if ('token' in json) return json as T; // login response - return whole object
+    if ('configuracion' in json) return json.configuracion as T;
+    if ('contenido' in json) return json.contenido as T;
+    if ('notificacion' in json) return json.notificacion as T;
+    if ('directorio' in json) return json.directorio as T;
+    // fallback: return the whole json if no known key
+    return json as T;
+  }
+
+  return json as T;
 }
+
+// ─── Mappers ──────────────────────────────────────────────────────────────────
 
 export function mapUser(raw: any): User {
   return {
@@ -96,6 +118,8 @@ export function mapUserToAPI(userData: Partial<User>): Record<string, any> {
   return r;
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {
@@ -113,6 +137,8 @@ export const authApi = {
       token
     ),
 };
+
+// ─── Users ────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
   getAll: (token: string) =>
@@ -153,12 +179,18 @@ export const usersApi = {
     ),
 };
 
+// ─── Config ───────────────────────────────────────────────────────────────────
+
 export const configApi = {
   get: (token: string) => request<any>('/configuracion', { method: 'GET' }, token),
 
-  update: (token: string, data: { precio_matricula?: number; fecha_inicio_pago?: string; fecha_vencimiento_pago?: string }) =>
-    request<any>('/configuracion', { method: 'PUT', body: JSON.stringify(data) }, token),
+  update: (
+    token: string,
+    data: { precio_matricula?: number; fecha_inicio_pago?: string; fecha_vencimiento_pago?: string }
+  ) => request<any>('/configuracion', { method: 'PUT', body: JSON.stringify(data) }, token),
 };
+
+// ─── Contenido ────────────────────────────────────────────────────────────────
 
 export const contenidoApi = {
   get: () =>
@@ -167,6 +199,8 @@ export const contenidoApi = {
   update: (token: string, data: { home_content?: any; dashboard_content?: any }) =>
     request<any>('/contenido', { method: 'PUT', body: JSON.stringify(data) }, token),
 };
+
+// ─── Directorio (public) ──────────────────────────────────────────────────────
 
 export const directorioApi = {
   get: () => request<any[]>('/directorio', { method: 'GET' }),
