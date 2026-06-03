@@ -2,9 +2,6 @@ import type { User, Notificacion, ConfiguracionSistema } from '@/types';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? 'https://cdgm-production.up.railway.app') + '/api';
 
-// ─── Generic HTTP client ───────────────────────────────────────────────────────
-// Unwraps { success, data } or { success, usuario } or returns raw if already array/primitive
-
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -23,17 +20,15 @@ async function request<T>(
 
   const json = await res.json();
 
-  // Unwrap common API wrapper patterns: { success, data }, { success, usuario }, etc.
   if (json && typeof json === 'object' && !Array.isArray(json) && 'success' in json) {
     if ('data' in json) return json.data as T;
     if ('usuario' in json) return json.usuario as T;
     if ('usuarios' in json) return json.usuarios as T;
-    if ('token' in json) return json as T; // login response - return whole object
+    if ('token' in json) return json as T;
     if ('configuracion' in json) return json.configuracion as T;
     if ('contenido' in json) return json.contenido as T;
     if ('notificacion' in json) return json.notificacion as T;
     if ('directorio' in json) return json.directorio as T;
-    // fallback: return the whole json if no known key
     return json as T;
   }
 
@@ -119,7 +114,6 @@ export function mapUserToAPI(userData: Partial<User>): Record<string, any> {
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
-
 export const authApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {
@@ -130,16 +124,16 @@ export const authApi = {
   me: (token: string) =>
     request<any>('/auth/me', { method: 'GET' }, token),
 
+  // Endpoint correcto del backend: /auth/change-password
   changePassword: (token: string, currentPassword: string, newPassword: string) =>
     request<void>(
-      '/auth/password',
+      '/auth/change-password',
       { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) },
       token
     ),
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────
-
 export const usersApi = {
   getAll: (token: string) =>
     request<any[]>('/usuarios', { method: 'GET' }, token),
@@ -152,22 +146,22 @@ export const usersApi = {
 
   updateEstado: (token: string, id: string, estado: string) =>
     request<any>(
-      `/usuarios/${id}/estado`,
-      { method: 'PATCH', body: JSON.stringify({ estado }) },
+      `/usuarios/${id}`,
+      { method: 'PUT', body: JSON.stringify({ estado }) },
       token
     ),
 
   updatePago: (token: string, id: string, data: { estado_pago: string; monto_deuda?: number }) =>
     request<any>(
-      `/usuarios/${id}/pago`,
-      { method: 'PATCH', body: JSON.stringify(data) },
+      `/usuarios/${id}`,
+      { method: 'PUT', body: JSON.stringify(data) },
       token
     ),
 
   sendNotificacion: (token: string, id: string, data: { titulo: string; mensaje: string; tipo: string }) =>
     request<any>(
       `/notificaciones`,
-      { method: 'POST', body: JSON.stringify({ user_id: id, ...data }) },
+      { method: 'POST', body: JSON.stringify({ userId: id, ...data }) },
       token
     ),
 
@@ -180,7 +174,6 @@ export const usersApi = {
 };
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
 export const configApi = {
   get: (token: string) => request<any>('/configuracion', { method: 'GET' }, token),
 
@@ -191,7 +184,6 @@ export const configApi = {
 };
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
-
 export const contenidoApi = {
   get: () =>
     request<{ home_content: any; dashboard_content: any }>('/contenido', { method: 'GET' }),
@@ -200,8 +192,7 @@ export const contenidoApi = {
     request<any>('/contenido', { method: 'PUT', body: JSON.stringify(data) }, token),
 };
 
-// ─── Directorio (public) ──────────────────────────────────────────────────────
-
+// ─── Directorio (público) ─────────────────────────────────────────────────────
 export const directorioApi = {
   get: () => request<any[]>('/directorio', { method: 'GET' }),
 };

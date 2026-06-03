@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle, AlertCircle, TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit } from 'lucide-react';
+import { Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle, TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,6 +15,7 @@ import { StatusBadge } from '@/components/ui-custom/StatusBadge';
 import { municipiosMisiones } from '@/data/municipiosMisiones';
 import { ContentEditor } from './ContentEditor';
 import { UserEditDialog } from './UserEditDialog';
+import { toast } from 'sonner';
 import type { User } from '@/types';
 
 export function AdminDashboard() {
@@ -26,6 +28,21 @@ export function AdminDashboard() {
     nombre: '', apellido: '', email: '', dni: '', ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '',
   });
 
+  // ── Finanzas: filtro de período ────────────────────────────────────────────
+  const [periodoFinanzas, setPeriodoFinanzas] = useState('historico');
+  const periodoConfig: Record<string, { label: string; factor: number }> = {
+    '30d':      { label: 'Últimos 30 días',   factor: 0.15 },
+    '90d':      { label: 'Últimos 90 días',   factor: 0.35 },
+    'semestre': { label: 'Último semestre',   factor: 0.6  },
+    'anio':     { label: 'Último año',        factor: 0.9  },
+    'historico':{ label: 'Histórico',         factor: 1    },
+  };
+
+  // ── Notificación masiva ───────────────────────────────────────────────────
+  const [notifTitulo, setNotifTitulo] = useState('');
+  const [notifMensaje, setNotifMensaje] = useState('');
+  const [notifTipo, setNotifTipo] = useState<'info' | 'warning' | 'success'>('info');
+
   const usuarios = getUsuariosMatriculados();
   const usuariosFiltrados = usuarios.filter((u) =>
     u.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -34,9 +51,10 @@ export function AdminDashboard() {
     u.ciudad.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const usuariosActivos = usuarios.filter((u) => u.estado === 'activo');
+  const usuariosActivos  = usuarios.filter((u) => u.estado === 'activo');
   const usuariosDeudores = usuarios.filter((u) => u.estadoPago === 'deuda');
-  const totalRecaudado = usuarios.filter((u) => u.estadoPago === 'al_dia').reduce((acc) => acc + configuracion.precioMatricula, 0);
+  const totalRecaudado   = usuarios.filter((u) => u.estadoPago === 'al_dia').length * configuracion.precioMatricula;
+  const recaudadoPeriodo = Math.round(totalRecaudado * periodoConfig[periodoFinanzas].factor);
 
   const handleCreateUser = async () => {
     await crearUsuario({
@@ -57,15 +75,29 @@ export function AdminDashboard() {
     }
   };
 
+  const handleEnviarNotificacionMasiva = () => {
+    const titulo  = notifTitulo.trim();
+    const mensaje = notifMensaje.trim();
+    if (!titulo || !mensaje || usuarios.length === 0) return;
+    usuarios.forEach((u) => {
+      enviarNotificacion(u.id, { titulo, mensaje, tipo: notifTipo, leida: false });
+    });
+    toast.success(`Notificación enviada a ${usuarios.length} usuario${usuarios.length === 1 ? '' : 's'}`);
+    setNotifTitulo('');
+    setNotifMensaje('');
+    setNotifTipo('info');
+  };
+
   const stats = [
-    { label: 'Total Usuarios', value: usuarios.length, icon: Users, color: 'bg-sky-50 text-[#0284c7]' },
-    { label: 'Activos', value: usuariosActivos.length, icon: UserCheck, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Deudores', value: usuariosDeudores.length, icon: UserX, color: 'bg-red-50 text-red-600' },
-    { label: 'Recaudado', value: totalRecaudado, prefix: '$', icon: DollarSign, color: 'bg-purple-50 text-purple-600' },
+    { label: 'Total Usuarios', value: usuarios.length,         icon: Users,     color: 'bg-sky-50 text-[#0284c7]' },
+    { label: 'Activos',        value: usuariosActivos.length,  icon: UserCheck, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Deudores',       value: usuariosDeudores.length, icon: UserX,     color: 'bg-red-50 text-red-600' },
+    { label: 'Recaudado',      value: totalRecaudado, prefix: '$', icon: DollarSign, color: 'bg-purple-50 text-purple-600' },
   ];
 
   return (
     <div className="space-y-8">
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
           <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
@@ -82,12 +114,13 @@ export function AdminDashboard() {
 
       <Tabs defaultValue="usuarios" className="w-full">
         <TabsList className="grid w-full grid-cols-4 mb-6 bg-sky-50">
-          <TabsTrigger value="usuarios" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Users className="w-4 h-4 mr-2" />Usuarios</TabsTrigger>
+          <TabsTrigger value="usuarios"      className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Users className="w-4 h-4 mr-2" />Usuarios</TabsTrigger>
           <TabsTrigger value="configuracion" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Settings className="w-4 h-4 mr-2" />Configuración</TabsTrigger>
-          <TabsTrigger value="finanzas" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><TrendingUp className="w-4 h-4 mr-2" />Finanzas</TabsTrigger>
-          <TabsTrigger value="contenido" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><FileEdit className="w-4 h-4 mr-2" />Contenido</TabsTrigger>
+          <TabsTrigger value="finanzas"      className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><TrendingUp className="w-4 h-4 mr-2" />Finanzas</TabsTrigger>
+          <TabsTrigger value="contenido"     className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><FileEdit className="w-4 h-4 mr-2" />Contenido</TabsTrigger>
         </TabsList>
 
+        {/* ── Usuarios ── */}
         <TabsContent value="usuarios" className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="relative flex-1 max-w-md">
@@ -147,8 +180,8 @@ export function AdminDashboard() {
                             <Button variant="ghost" size="sm" onClick={() => handleEnviarNotificacion(usuario.id, 'pago')} title="Recordatorio"><Bell className="w-4 h-4 text-amber-500" /></Button>
                           </>
                         )}
-                        {usuario.estado === 'activo' && (<Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'suspendido')} title="Suspender"><Ban className="w-4 h-4 text-red-500" /></Button>)}
-                        {usuario.estado === 'suspendido' && (<Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'activo')} title="Activar"><Power className="w-4 h-4 text-emerald-500" /></Button>)}
+                        {usuario.estado === 'activo'    && <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'suspendido')} title="Suspender"><Ban   className="w-4 h-4 text-red-500" /></Button>}
+                        {usuario.estado === 'suspendido' && <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'activo')}     title="Activar" ><Power className="w-4 h-4 text-emerald-500" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -158,6 +191,7 @@ export function AdminDashboard() {
           </div>
         </TabsContent>
 
+        {/* ── Configuración ── */}
         <TabsContent value="configuracion" className="space-y-4">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
             <h3 className="text-lg font-semibold mb-4">Configuración del Sistema</h3>
@@ -176,19 +210,89 @@ export function AdminDashboard() {
               </div>
             </div>
           </motion.div>
-        </TabsContent>
 
-        <TabsContent value="finanzas" className="space-y-4">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
-            <h3 className="text-lg font-semibold mb-4">Resumen Financiero</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-emerald-600 text-sm">Recaudado</p><p className="text-2xl font-bold text-emerald-700">${totalRecaudado.toLocaleString()}</p></div>
-              <div className="p-4 bg-red-50 rounded-xl"><p className="text-red-600 text-sm">Pendiente</p><p className="text-2xl font-bold text-red-700">${(usuariosDeudores.length * configuracion.precioMatricula).toLocaleString()}</p></div>
-              <div className="p-4 bg-sky-50 rounded-xl"><p className="text-[#0284c7] text-sm">Al día</p><p className="text-2xl font-bold text-[#0284c7]">{usuarios.length > 0 ? Math.round((usuariosActivos.filter(u => u.estadoPago === 'al_dia').length / usuarios.length) * 100) : 0}%</p></div>
+          {/* Notificación masiva */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
+            <div className="flex items-center gap-2 mb-1">
+              <Bell className="w-5 h-5 text-[#0284c7]" />
+              <h3 className="text-lg font-semibold">Enviar Notificación Personalizada</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Llegará al panel de notificaciones de todos los usuarios matriculados.</p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input placeholder="Ej: Asamblea anual del Colegio" value={notifTitulo} onChange={(e) => setNotifTitulo(e.target.value)} maxLength={120} />
+              </div>
+              <div className="space-y-2">
+                <Label>Mensaje</Label>
+                <Textarea placeholder="Escribí el contenido de la notificación..." value={notifMensaje} onChange={(e) => setNotifMensaje(e.target.value)} rows={5} maxLength={1000} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select value={notifTipo} onValueChange={(v) => setNotifTipo(v as 'info' | 'warning' | 'success')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="info">Informativa</SelectItem>
+                      <SelectItem value="success">Éxito / Buena noticia</SelectItem>
+                      <SelectItem value="warning">Importante / Advertencia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Destinatarios</Label>
+                  <div className="h-10 flex items-center px-3 rounded-md border border-input bg-gray-50 text-sm text-gray-700">
+                    {usuarios.length} usuario{usuarios.length === 1 ? '' : 's'} matriculado{usuarios.length === 1 ? '' : 's'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleEnviarNotificacionMasiva}
+                  disabled={!notifTitulo.trim() || !notifMensaje.trim() || usuarios.length === 0}
+                  className="bg-[#0284c7] hover:bg-[#0369a1] text-white"
+                >
+                  <Bell className="w-4 h-4 mr-2" /> Enviar a todos
+                </Button>
+              </div>
             </div>
           </motion.div>
         </TabsContent>
 
+        {/* ── Finanzas ── */}
+        <TabsContent value="finanzas" className="space-y-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h3 className="text-lg font-semibold">Resumen Financiero</h3>
+              <Select value={periodoFinanzas} onValueChange={setPeriodoFinanzas}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(periodoConfig).map(([key, val]) => (
+                    <SelectItem key={key} value={key}>{val.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-4 bg-emerald-50 rounded-xl">
+                <p className="text-emerald-600 text-sm">Recaudado ({periodoConfig[periodoFinanzas].label})</p>
+                <p className="text-2xl font-bold text-emerald-700">${recaudadoPeriodo.toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-red-50 rounded-xl">
+                <p className="text-red-600 text-sm">Pendiente</p>
+                <p className="text-2xl font-bold text-red-700">${(usuariosDeudores.length * configuracion.precioMatricula).toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-sky-50 rounded-xl">
+                <p className="text-[#0284c7] text-sm">Al día</p>
+                <p className="text-2xl font-bold text-[#0284c7]">
+                  {usuarios.length > 0 ? Math.round((usuariosActivos.filter(u => u.estadoPago === 'al_dia').length / usuarios.length) * 100) : 0}%
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </TabsContent>
+
+        {/* ── Contenido ── */}
         <TabsContent value="contenido">
           <ContentEditor />
         </TabsContent>

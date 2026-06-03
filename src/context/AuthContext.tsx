@@ -12,6 +12,9 @@ const defaultConfig: ConfiguracionSistema = {
   fechaVencimientoPago: '2025-03-31',
 };
 
+// Almacén en memoria para códigos de recuperación (demo)
+const recoveryCodes = new Map<string, { code: string; expires: number }>();
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -20,6 +23,8 @@ interface AuthContextType {
   isLoading: boolean;
   updateUser: (userData: Partial<User>) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  solicitarRecuperacion: (email: string) => Promise<{ success: boolean; codigo?: string }>;
+  resetPasswordConCodigo: (email: string, codigo: string, newPassword: string) => Promise<boolean>;
   marcarNotificacionLeida: (notificacionId: string) => void;
   enviarNotificacion: (userId: string, notificacion: Omit<Notificacion, 'id' | 'fecha'>) => void;
   crearUsuario: (userData: Omit<User, 'id' | 'notificaciones'> & { password: string }) => Promise<User>;
@@ -43,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [configuracion, setConfiguracion] = useState<ConfiguracionSistema>(defaultConfig);
 
-  // ── Load admin data (users + config) ────────────────────────────────────────
   const loadAdminData = async (t: string) => {
     try {
       const [rawUsers, rawConfig] = await Promise.all([
@@ -57,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Restore session from localStorage on mount ───────────────────────────────
   useEffect(() => {
     const storedToken = localStorage.getItem('cdg_token');
     const storedUserStr = localStorage.getItem('cdg_user');
@@ -72,7 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mapped.tipo === 'administrador') await loadAdminData(storedToken);
       })
       .catch(async () => {
-        // /auth/me failed — try to use stored user as fallback
         if (storedUserStr) {
           try {
             const stored = JSON.parse(storedUserStr) as User;
@@ -90,7 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       const { token: newToken, user: rawUser } = await authApi.login(email, password);
@@ -112,6 +113,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUsuarios([]);
     localStorage.removeItem('cdg_token');
     localStorage.removeItem('cdg_user');
+  };
+
+  // ── Recuperación de contraseña (demo — genera código local) ────────────────
+  const solicitarRecuperacion = async (email: string): Promise<{ success: boolean; codigo?: string }> => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    recoveryCodes.set(email.toLowerCase(), {
+      code,
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutos
+    });
+    // En producción aquí se llamaría al backend para enviar el email real
+    return { success: true, codigo: code };
+  };
+
+  const resetPasswordConCodigo = async (
+    email: string,
+    codigo: string,
+    _newPassword: string
+  ): Promise<boolean> => {
+    const stored = recoveryCodes.get(email.toLowerCase());
+    if (!stored || stored.code !== codigo || Date.now() > stored.expires) {
+      return false;
+    }
+    recoveryCodes.delete(email.toLowerCase());
+    // En producción aquí se llamaría al backend con el nuevo password
+    // Por ahora el flujo UI funciona como demo
+    return true;
   };
 
   // ── User updates ─────────────────────────────────────────────────────────────
@@ -155,7 +182,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Notificaciones ───────────────────────────────────────────────────────────
   const marcarNotificacionLeida = async (notificacionId: string) => {
     if (!user || !token) return;
-    // Optimistic update
     const optimistic = {
       ...user,
       notificaciones: user.notificaciones.map(n =>
@@ -164,7 +190,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     setUser(optimistic);
     localStorage.setItem('cdg_user', JSON.stringify(optimistic));
-    // Fire and forget API call
     usersApi.marcarNotifLeida(token, user.id, notificacionId).catch(console.error);
   };
 
@@ -179,8 +204,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mensaje: notificacion.mensaje,
         tipo: notificacion.tipo,
       });
-      toast.success('Notificación enviada');
-      // Refresh users
       const raw = await usersApi.getAll(token);
       setUsuarios(raw.map(mapUser));
     } catch (err: any) {
@@ -188,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Admin: create user ───────────────────────────────────────────────────────
+  // ── Admin: crear usuario ──────────────────────────────────────────────────────
   const crearUsuario = async (
     userData: Omit<User, 'id' | 'notificaciones'> & { password: string }
   ): Promise<User> => {
@@ -217,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return newUser;
   };
 
-  // ── Admin: estado / pago ─────────────────────────────────────────────────────
+  // ── Admin: estado / pago ──────────────────────────────────────────────────────
   const actualizarEstadoUsuario = async (
     userId: string,
     estado: 'activo' | 'suspendido' | 'baja'
@@ -226,9 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await usersApi.updateEstado(token, userId, estado);
       setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, estado } : u));
-      toast.success(
-        estado === 'activo' ? 'Usuario activado' : 'Usuario suspendido'
-      );
+      toast.success(estado === 'activo' ? 'Usuario activado' : 'Usuario suspendido');
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar estado');
     }
@@ -266,7 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Admin: edit user ─────────────────────────────────────────────────────────
+  // ── Admin: editar usuario ─────────────────────────────────────────────────────
   const updateUsuarioAdmin = async (userId: string, userData: Partial<User>) => {
     if (!token) return;
     try {
@@ -295,14 +316,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Config ───────────────────────────────────────────────────────────────────
+  // ── Config ────────────────────────────────────────────────────────────────────
   const updateConfiguracion = async (config: Partial<ConfiguracionSistema>) => {
     if (!token) return;
     const apiData: Record<string, any> = {};
     if (config.precioMatricula !== undefined) apiData.precio_matricula = config.precioMatricula;
     if (config.fechaInicioPago !== undefined) apiData.fecha_inicio_pago = config.fechaInicioPago;
     if (config.fechaVencimientoPago !== undefined) apiData.fecha_vencimiento_pago = config.fechaVencimientoPago;
-    // Optimistic update
     setConfiguracion(prev => ({ ...prev, ...config }));
     try {
       await configApi.update(token, apiData);
@@ -312,7 +332,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
   const getUsuariosMatriculados = () => usuarios.filter(u => u.tipo === 'matriculado');
   const getUsuariosAlDia = () =>
     usuarios.filter(u => u.tipo === 'matriculado' && u.estadoPago === 'al_dia');
@@ -322,6 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user, token, login, logout, isLoading,
         updateUser, updatePassword,
+        solicitarRecuperacion, resetPasswordConCodigo,
         marcarNotificacionLeida, enviarNotificacion,
         crearUsuario,
         actualizarEstadoPago, actualizarEstadoUsuario,
@@ -337,8 +357,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
