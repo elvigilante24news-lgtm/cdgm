@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, Notificacion, ConfiguracionSistema } from '@/types';
 import {
-  authApi, usersApi, configApi,
+  authApi, usersApi, configApi, pagosApi,
   mapUser, mapConfig, mapUserToAPI,
 } from '@/lib/api';
 import { toast } from 'sonner';
@@ -26,26 +26,28 @@ interface AuthContextType {
   solicitarRecuperacion: (email: string) => Promise<{ success: boolean; codigo?: string }>;
   resetPasswordConCodigo: (email: string, codigo: string, newPassword: string) => Promise<boolean>;
   marcarNotificacionLeida: (notificacionId: string) => void;
-  enviarNotificacion: (userId: string, notificacion: Omit<Notificacion, 'id' | 'fecha'>) => void;
+  enviarNotificacion: (userId: string, notificacion: Omit<Notificacion, 'id' | 'fecha'>) => Promise<void>;
+  enviarNotificacionMasiva: (notificacion: Omit<Notificacion, 'id' | 'fecha'>) => Promise<void>;
   crearUsuario: (userData: Omit<User, 'id' | 'notificaciones'> & { password: string }) => Promise<User>;
-  actualizarEstadoPago: (userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number) => void;
-  actualizarEstadoUsuario: (userId: string, estado: 'activo' | 'suspendido' | 'baja') => void;
+  actualizarEstadoPago: (userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number) => Promise<void>;
+  actualizarEstadoUsuario: (userId: string, estado: 'activo' | 'suspendido' | 'baja') => Promise<void>;
+  iniciarPagoMercadoPago: () => Promise<void>;
   configuracion: ConfiguracionSistema;
-  updateConfiguracion: (config: Partial<ConfiguracionSistema>) => void;
+  updateConfiguracion: (config: Partial<ConfiguracionSistema>) => Promise<void>;
   getUsuariosMatriculados: () => User[];
   getUsuariosAlDia: () => User[];
   updateFotoPerfil: (fotoUrl: string) => void;
-  updateUsuarioAdmin: (userId: string, userData: Partial<User>) => void;
-  updateFotoPerfilAdmin: (userId: string, fotoUrl: string) => void;
+  updateUsuarioAdmin: (userId: string, userData: Partial<User>) => Promise<void>;
+  updateFotoPerfilAdmin: (userId: string, fotoUrl: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [usuarios, setUsuarios] = useState<User[]>([]);
+  const [user, setUser]               = useState<User | null>(null);
+  const [token, setToken]             = useState<string | null>(null);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [usuarios, setUsuarios]       = useState<User[]>([]);
   const [configuracion, setConfiguracion] = useState<ConfiguracionSistema>(defaultConfig);
 
   const loadAdminData = async (t: string) => {
@@ -62,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('cdg_token');
+    const storedToken   = localStorage.getItem('cdg_token');
     const storedUserStr = localStorage.getItem('cdg_user');
     if (!storedToken) { setIsLoading(false); return; }
 
@@ -115,37 +117,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('cdg_user');
   };
 
-  // ── Recuperación de contraseña (demo — genera código local) ────────────────
+  // ── Recuperación de contraseña (demo) ─────────────────────────────────────
   const solicitarRecuperacion = async (email: string): Promise<{ success: boolean; codigo?: string }> => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    recoveryCodes.set(email.toLowerCase(), {
-      code,
-      expires: Date.now() + 15 * 60 * 1000, // 15 minutos
-    });
-    // En producción aquí se llamaría al backend para enviar el email real
+    recoveryCodes.set(email.toLowerCase(), { code, expires: Date.now() + 15 * 60 * 1000 });
     return { success: true, codigo: code };
   };
 
   const resetPasswordConCodigo = async (
-    email: string,
-    codigo: string,
-    _newPassword: string
+    email: string, codigo: string, _newPassword: string
   ): Promise<boolean> => {
     const stored = recoveryCodes.get(email.toLowerCase());
-    if (!stored || stored.code !== codigo || Date.now() > stored.expires) {
-      return false;
-    }
+    if (!stored || stored.code !== codigo || Date.now() > stored.expires) return false;
     recoveryCodes.delete(email.toLowerCase());
-    // En producción aquí se llamaría al backend con el nuevo password
-    // Por ahora el flujo UI funciona como demo
     return true;
   };
 
-  // ── User updates ─────────────────────────────────────────────────────────────
+  // ── User updates ──────────────────────────────────────────────────────────
   const updateUser = async (userData: Partial<User>) => {
     if (!user || !token) return;
     try {
-      const raw = await usersApi.update(token, user.id, mapUserToAPI(userData));
+      const raw     = await usersApi.update(token, user.id, mapUserToAPI(userData));
       const updated = mapUser(raw);
       setUser(updated);
       localStorage.setItem('cdg_user', JSON.stringify(updated));
@@ -179,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Notificaciones ───────────────────────────────────────────────────────────
+  // ── Notificaciones ────────────────────────────────────────────────────────
   const marcarNotificacionLeida = async (notificacionId: string) => {
     if (!user || !token) return;
     const optimistic = {
@@ -190,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     setUser(optimistic);
     localStorage.setItem('cdg_user', JSON.stringify(optimistic));
+    // FIX: ahora usa PUT (antes era PATCH)
     usersApi.marcarNotifLeida(token, user.id, notificacionId).catch(console.error);
   };
 
@@ -204,94 +197,128 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mensaje: notificacion.mensaje,
         tipo: notificacion.tipo,
       });
-      const raw = await usersApi.getAll(token);
-      setUsuarios(raw.map(mapUser));
+      // FIX: no recargar getAll() después de cada notificación individual
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar notificación');
     }
   };
 
-  // ── Admin: crear usuario ──────────────────────────────────────────────────────
+  // FIX: nuevo método para envío masivo eficiente (1 sola request al backend)
+  const enviarNotificacionMasiva = async (
+    notificacion: Omit<Notificacion, 'id' | 'fecha'>
+  ) => {
+    if (!token) return;
+    try {
+      const result = await usersApi.sendNotificacionMasiva(token, {
+        titulo: notificacion.titulo,
+        mensaje: notificacion.mensaje,
+        tipo: notificacion.tipo,
+      });
+      toast.success(`Notificación enviada a ${result.count} usuario${result.count === 1 ? '' : 's'}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al enviar notificación masiva');
+    }
+  };
+
+  // ── MercadoPago ───────────────────────────────────────────────────────────
+  // FIX: flujo real de pago — redirige al usuario a MercadoPago Checkout Pro
+  const iniciarPagoMercadoPago = async () => {
+    if (!token) return;
+    try {
+      toast.loading('Preparando el pago...', { id: 'mp-loading' });
+      const { init_point, sandbox_init_point } = await pagosApi.crearPreferencia(token);
+      toast.dismiss('mp-loading');
+
+      // En producción usar init_point; en desarrollo usar sandbox_init_point
+      const url = import.meta.env.DEV ? sandbox_init_point : init_point;
+      if (!url) throw new Error('No se recibió URL de pago');
+
+      window.location.href = url;
+    } catch (err: any) {
+      toast.dismiss('mp-loading');
+      toast.error(err.message || 'Error al iniciar el pago. Intentá de nuevo.');
+    }
+  };
+
+  // ── Admin: crear usuario ──────────────────────────────────────────────────
   const crearUsuario = async (
     userData: Omit<User, 'id' | 'notificaciones'> & { password: string }
   ): Promise<User> => {
     if (!token) throw new Error('No autenticado');
     const apiData = {
-      nombre: userData.nombre,
-      apellido: userData.apellido,
-      email: userData.email,
-      password: userData.password,
-      dni: userData.dni,
-      ciudad: userData.ciudad,
-      celular: userData.celular,
-      domicilio: userData.domicilio,
-      numero_matricula: userData.numeroMatricula,
-      estudio: userData.estudio,
-      tipo: 'matriculado',
-      estado: 'activo',
-      estado_pago: 'deuda',
-      monto_deuda: configuracion.precioMatricula,
+      nombre:            userData.nombre,
+      apellido:          userData.apellido,
+      email:             userData.email,
+      password:          userData.password,
+      dni:               userData.dni,
+      ciudad:            userData.ciudad,
+      celular:           userData.celular,
+      domicilio:         userData.domicilio,
+      numero_matricula:  userData.numeroMatricula,
+      estudio:           userData.estudio,
+      tipo:              'matriculado',
+      estado:            'activo',
+      estado_pago:       'deuda',
+      monto_deuda:       configuracion.precioMatricula,
       fecha_vencimiento: configuracion.fechaVencimientoPago,
     };
-    const raw = await usersApi.create(token, apiData);
+    const raw     = await usersApi.create(token, apiData);
     const newUser = mapUser(raw);
     setUsuarios(prev => [...prev, newUser]);
-    toast.success('Usuario creado. Se envió un email de bienvenida.');
+    toast.success('Usuario creado. Se envió un email de bienvenida con sus credenciales.');
     return newUser;
   };
 
-  // ── Admin: estado / pago ──────────────────────────────────────────────────────
+  // ── Admin: estado / pago ──────────────────────────────────────────────────
   const actualizarEstadoUsuario = async (
-    userId: string,
-    estado: 'activo' | 'suspendido' | 'baja'
+    userId: string, estado: 'activo' | 'suspendido' | 'baja'
   ) => {
     if (!token) return;
     try {
+      // FIX: ahora llama a PUT /usuarios/:id/estado (antes iba a PUT /usuarios/:id)
       await usersApi.updateEstado(token, userId, estado);
       setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, estado } : u));
-      toast.success(estado === 'activo' ? 'Usuario activado' : 'Usuario suspendido');
+      toast.success(estado === 'activo' ? 'Usuario activado' : estado === 'suspendido' ? 'Usuario suspendido' : 'Usuario dado de baja');
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar estado');
     }
   };
 
   const actualizarEstadoPago = async (
-    userId: string,
-    estado: 'al_dia' | 'deuda',
-    montoDeuda?: number
+    userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number
   ) => {
     if (!token) return;
     try {
+      // FIX: ahora llama a PUT /usuarios/:id/pago con payload camelCase
       await usersApi.updatePago(token, userId, {
-        estado_pago: estado,
-        monto_deuda: estado === 'deuda' ? montoDeuda : undefined,
+        estadoPago: estado,
+        montoDeuda: estado === 'deuda' ? montoDeuda : undefined,
       });
       setUsuarios(prev =>
         prev.map(u =>
           u.id === userId
             ? {
                 ...u,
-                estadoPago: estado,
-                montoDeuda: estado === 'deuda' ? montoDeuda : undefined,
-                fechaUltimoPago:
-                  estado === 'al_dia'
-                    ? new Date().toISOString().split('T')[0]
-                    : u.fechaUltimoPago,
+                estadoPago:     estado,
+                montoDeuda:     estado === 'deuda' ? montoDeuda : undefined,
+                fechaUltimoPago: estado === 'al_dia'
+                  ? new Date().toISOString().split('T')[0]
+                  : u.fechaUltimoPago,
               }
             : u
         )
       );
-      toast.success(estado === 'al_dia' ? 'Pago registrado' : 'Deuda registrada');
+      toast.success(estado === 'al_dia' ? 'Pago registrado ✓' : 'Deuda registrada');
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar pago');
     }
   };
 
-  // ── Admin: editar usuario ─────────────────────────────────────────────────────
+  // ── Admin: editar usuario ─────────────────────────────────────────────────
   const updateUsuarioAdmin = async (userId: string, userData: Partial<User>) => {
     if (!token) return;
     try {
-      const raw = await usersApi.update(token, userId, mapUserToAPI(userData));
+      const raw     = await usersApi.update(token, userId, mapUserToAPI(userData));
       const updated = mapUser(raw);
       setUsuarios(prev => prev.map(u => u.id === userId ? updated : u));
       if (user?.id === userId) {
@@ -316,13 +343,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Config ────────────────────────────────────────────────────────────────────
+  // ── Config ────────────────────────────────────────────────────────────────
   const updateConfiguracion = async (config: Partial<ConfiguracionSistema>) => {
     if (!token) return;
+    // FIX: enviar camelCase para que coincida con UpdateConfiguracionInput del backend
     const apiData: Record<string, any> = {};
-    if (config.precioMatricula !== undefined) apiData.precio_matricula = config.precioMatricula;
-    if (config.fechaInicioPago !== undefined) apiData.fecha_inicio_pago = config.fechaInicioPago;
-    if (config.fechaVencimientoPago !== undefined) apiData.fecha_vencimiento_pago = config.fechaVencimientoPago;
+    if (config.precioMatricula      !== undefined) apiData.precioMatricula      = config.precioMatricula;
+    if (config.fechaInicioPago      !== undefined) apiData.fechaInicioPago      = config.fechaInicioPago;
+    if (config.fechaVencimientoPago !== undefined) apiData.fechaVencimientoPago = config.fechaVencimientoPago;
     setConfiguracion(prev => ({ ...prev, ...config }));
     try {
       await configApi.update(token, apiData);
@@ -342,9 +370,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user, token, login, logout, isLoading,
         updateUser, updatePassword,
         solicitarRecuperacion, resetPasswordConCodigo,
-        marcarNotificacionLeida, enviarNotificacion,
+        marcarNotificacionLeida,
+        enviarNotificacion,
+        enviarNotificacionMasiva,
         crearUsuario,
         actualizarEstadoPago, actualizarEstadoUsuario,
+        iniciarPagoMercadoPago,
         configuracion, updateConfiguracion,
         getUsuariosMatriculados, getUsuariosAlDia,
         updateFotoPerfil, updateUsuarioAdmin, updateFotoPerfilAdmin,

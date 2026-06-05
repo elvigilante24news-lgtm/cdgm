@@ -11,12 +11,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "ts-node-dev --transpile-only prisma/seed.ts"
   },
-  "keywords": [
-    "cdgm",
-    "matriculados",
-    "api",
-    "express"
-  ],
+  "keywords": ["cdgm", "matriculados", "api", "express"],
   "author": "Colegio de Disenadores Graficos de Misiones",
   "license": "UNLICENSED",
   "dependencies": {
@@ -25,6 +20,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
+    "mercadopago": "^2.0.15",
+    "resend": "^3.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

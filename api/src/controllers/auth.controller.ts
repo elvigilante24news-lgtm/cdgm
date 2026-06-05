@@ -7,7 +7,7 @@ import { AuthRequest, LoginInput, ChangePasswordInput } from '../types';
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const JWT_EXPIRES_IN = '7d';
 
-// Excluir campos sensibles del usuario
+// Select de campos públicos del usuario (sin password)
 const userSelect = {
   id: true,
   email: true,
@@ -33,6 +33,11 @@ const userSelect = {
   behance: true,
   created_at: true,
   updated_at: true,
+  // FIX: incluir notificaciones para que el usuario las vea en su dashboard
+  notificaciones: {
+    orderBy: { fecha: 'desc' as const },
+    take: 50,
+  },
 };
 
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -44,40 +49,44 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const user = await prisma.user.findUnique({
+    // Primero buscamos solo con password para verificar credenciales
+    const userRaw = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
 
-    if (!user) {
+    if (!userRaw) {
       res.status(401).json({ success: false, error: 'Credenciales invalidas' });
       return;
     }
 
-    // Usuarios en estado 'baja' no pueden loguearse
-    if (user.estado === 'baja') {
+    if (userRaw.estado === 'baja') {
       res.status(403).json({ success: false, error: 'Usuario dado de baja. Contacte al administrador.' });
       return;
     }
 
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = await bcrypt.compare(password, userRaw.password);
     if (!validPassword) {
       res.status(401).json({ success: false, error: 'Credenciales invalidas' });
       return;
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, tipo: user.tipo },
+      { id: userRaw.id, email: userRaw.email, tipo: userRaw.tipo },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    const { password: _, ...userWithoutPassword } = user;
+    // Segunda query para obtener el usuario completo con notificaciones
+    const user = await prisma.user.findUnique({
+      where: { id: userRaw.id },
+      select: userSelect,
+    });
 
     res.status(200).json({
       success: true,
       data: {
         token,
-        user: userWithoutPassword,
+        user,
       },
     });
   } catch (error) {
@@ -87,7 +96,6 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 };
 
 export const logout = async (_req: AuthRequest, res: Response): Promise<void> => {
-  // JWT es stateless, el logout se maneja en el frontend eliminando el token
   res.status(200).json({ success: true, message: 'Sesion cerrada correctamente' });
 };
 
@@ -108,7 +116,6 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Usuarios en estado 'baja' no pueden acceder
     if (user.estado === 'baja') {
       res.status(403).json({ success: false, error: 'Usuario dado de baja. Contacte al administrador.' });
       return;

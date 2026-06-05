@@ -6,6 +6,7 @@ import { ContentProvider } from "@/context/ContentContext";
 import HomePage from "@/pages/HomePage";
 import DashboardPage from "@/pages/DashboardPage";
 import DirectorioPage from "@/pages/DirectorioPage";
+import PagoResultadoPage from "@/pages/PagoResultadoPage"; // FIX: páginas de retorno de MercadoPago
 import NotFound from "@/pages/NotFound";
 
 const App = () => (
@@ -15,10 +16,14 @@ const App = () => (
         <Toaster />
         <HashRouter>
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/directorio" element={<DirectorioPage />} />
-            <Route path="*" element={<NotFound />} />
+            <Route path="/"                   element={<HomePage />} />
+            <Route path="/dashboard"          element={<DashboardPage />} />
+            <Route path="/directorio"         element={<DirectorioPage />} />
+            {/* FIX: rutas de retorno de MercadoPago Checkout Pro */}
+            <Route path="/pago/exitoso"   element={<PagoResultadoPage />} />
+            <Route path="/pago/fallido"   element={<PagoResultadoPage />} />
+            <Route path="/pago/pendiente" element={<PagoResultadoPage />} />
+            <Route path="*"                   element={<NotFound />} />
           </Routes>
         </HashRouter>
       </TooltipProvider>

@@ -30,16 +30,13 @@ export const marcarComoLeida = async (req: AuthRequest, res: Response): Promise<
 
     const { id } = req.params;
 
-    const notificacion = await prisma.notificacion.findUnique({
-      where: { id },
-    });
+    const notificacion = await prisma.notificacion.findUnique({ where: { id } });
 
     if (!notificacion) {
       res.status(404).json({ success: false, error: 'Notificacion no encontrada' });
       return;
     }
 
-    // Verificar que la notificacion pertenezca al usuario autenticado
     if (notificacion.user_id !== req.user.id) {
       res.status(403).json({ success: false, error: 'No tiene permiso para modificar esta notificacion' });
       return;
@@ -66,7 +63,6 @@ export const crearNotificacion = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    // Verificar que el usuario destino existe
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       res.status(404).json({ success: false, error: 'Usuario destino no encontrado' });
@@ -85,6 +81,46 @@ export const crearNotificacion = async (req: AuthRequest, res: Response): Promis
     res.status(201).json({ success: true, data: notificacion, message: 'Notificacion enviada correctamente' });
   } catch (error) {
     console.error('Error creando notificacion:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+};
+
+// FIX: nuevo endpoint para envío masivo a todos los matriculados (1 sola query)
+export const crearNotificacionMasiva = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { titulo, mensaje, tipo } = req.body as { titulo: string; mensaje: string; tipo?: string };
+
+    if (!titulo || !mensaje) {
+      res.status(400).json({ success: false, error: 'titulo y mensaje son requeridos' });
+      return;
+    }
+
+    const matriculados = await prisma.user.findMany({
+      where: { tipo: 'matriculado' },
+      select: { id: true },
+    });
+
+    if (matriculados.length === 0) {
+      res.status(200).json({ success: true, data: { count: 0 }, message: 'No hay usuarios matriculados' });
+      return;
+    }
+
+    await prisma.notificacion.createMany({
+      data: matriculados.map((u) => ({
+        user_id: u.id,
+        titulo: titulo.trim(),
+        mensaje: mensaje.trim(),
+        tipo: (tipo || 'info') as 'info' | 'warning' | 'success',
+      })),
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { count: matriculados.length },
+      message: `Notificación enviada a ${matriculados.length} usuario${matriculados.length === 1 ? '' : 's'}`,
+    });
+  } catch (error) {
+    console.error('Error creando notificacion masiva:', error);
     res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 };

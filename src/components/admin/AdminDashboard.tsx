@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle, TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit } from 'lucide-react';
+import {
+  Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle,
+  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,35 +18,45 @@ import { StatusBadge } from '@/components/ui-custom/StatusBadge';
 import { municipiosMisiones } from '@/data/municipiosMisiones';
 import { ContentEditor } from './ContentEditor';
 import { UserEditDialog } from './UserEditDialog';
-import { toast } from 'sonner';
 import type { User } from '@/types';
 
 export function AdminDashboard() {
-  const { getUsuariosMatriculados, configuracion, updateConfiguracion, crearUsuario, enviarNotificacion, actualizarEstadoPago, actualizarEstadoUsuario } = useAuth();
+  const {
+    getUsuariosMatriculados,
+    configuracion, updateConfiguracion,
+    crearUsuario,
+    enviarNotificacion,
+    enviarNotificacionMasiva, // FIX: usa el método masivo (1 request) en vez del loop N+1
+    actualizarEstadoPago,
+    actualizarEstadoUsuario,
+  } = useAuth();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen]     = useState(false);
+  const [selectedUser, setSelectedUser]             = useState<User | null>(null);
   const [newUserData, setNewUserData] = useState({
-    nombre: '', apellido: '', email: '', dni: '', ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '',
+    nombre: '', apellido: '', email: '', dni: '',
+    ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '',
   });
 
-  // ── Finanzas: filtro de período ────────────────────────────────────────────
+  // ── Finanzas: filtro de período ───────────────────────────────────────────
   const [periodoFinanzas, setPeriodoFinanzas] = useState('historico');
   const periodoConfig: Record<string, { label: string; factor: number }> = {
-    '30d':      { label: 'Últimos 30 días',   factor: 0.15 },
-    '90d':      { label: 'Últimos 90 días',   factor: 0.35 },
-    'semestre': { label: 'Último semestre',   factor: 0.6  },
-    'anio':     { label: 'Último año',        factor: 0.9  },
-    'historico':{ label: 'Histórico',         factor: 1    },
+    '30d':       { label: 'Últimos 30 días',  factor: 0.15 },
+    '90d':       { label: 'Últimos 90 días',  factor: 0.35 },
+    'semestre':  { label: 'Último semestre',  factor: 0.6  },
+    'anio':      { label: 'Último año',       factor: 0.9  },
+    'historico': { label: 'Histórico',        factor: 1    },
   };
 
   // ── Notificación masiva ───────────────────────────────────────────────────
-  const [notifTitulo, setNotifTitulo] = useState('');
+  const [notifTitulo, setNotifTitulo]   = useState('');
   const [notifMensaje, setNotifMensaje] = useState('');
-  const [notifTipo, setNotifTipo] = useState<'info' | 'warning' | 'success'>('info');
+  const [notifTipo, setNotifTipo]       = useState<'info' | 'warning' | 'success'>('info');
+  const [enviandoMasiva, setEnviandoMasiva] = useState(false);
 
-  const usuarios = getUsuariosMatriculados();
+  const usuarios          = getUsuariosMatriculados();
   const usuariosFiltrados = usuarios.filter((u) =>
     u.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,35 +70,62 @@ export function AdminDashboard() {
   const recaudadoPeriodo = Math.round(totalRecaudado * periodoConfig[periodoFinanzas].factor);
 
   const handleCreateUser = async () => {
-    await crearUsuario({
-      ...newUserData, tipo: 'matriculado', estado: 'activo', estadoPago: 'deuda',
-      montoDeuda: configuracion.precioMatricula, fechaVencimiento: configuracion.fechaVencimientoPago,
-    });
-    setIsCreateDialogOpen(false);
-    setNewUserData({ nombre: '', apellido: '', email: '', dni: '', ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '' });
-  };
-
-  const handleEditUser = (usuario: User) => { setSelectedUser(usuario); setIsEditDialogOpen(true); };
-
-  const handleEnviarNotificacion = (userId: string, tipo: 'pago' | 'general') => {
-    if (tipo === 'pago') {
-      enviarNotificacion(userId, { titulo: 'Recordatorio de Pago', mensaje: `Tu matrícula venció. Por favor realizá el pago de $${configuracion.precioMatricula.toLocaleString()}.`, tipo: 'warning', leida: false });
-    } else {
-      enviarNotificacion(userId, { titulo: 'Notificación del Colegio', mensaje: 'Tenés un mensaje importante del Colegio de Diseñadores Gráficos.', tipo: 'info', leida: false });
+    try {
+      await crearUsuario({
+        ...newUserData,
+        tipo: 'matriculado',
+        estado: 'activo',
+        estadoPago: 'deuda',
+        montoDeuda: configuracion.precioMatricula,
+        fechaVencimiento: configuracion.fechaVencimientoPago,
+      });
+      setIsCreateDialogOpen(false);
+      setNewUserData({
+        nombre: '', apellido: '', email: '', dni: '',
+        ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '',
+      });
+    } catch (err: any) {
+      // El toast de error ya se maneja en crearUsuario
     }
   };
 
-  const handleEnviarNotificacionMasiva = () => {
+  const handleEditUser = (usuario: User) => {
+    setSelectedUser(usuario);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEnviarNotificacion = (userId: string, tipo: 'pago' | 'general') => {
+    if (tipo === 'pago') {
+      enviarNotificacion(userId, {
+        titulo:  'Recordatorio de Pago',
+        mensaje: `Tu matrícula venció. Por favor realizá el pago de $${configuracion.precioMatricula.toLocaleString('es-AR')}.`,
+        tipo:    'warning',
+        leida:   false,
+      });
+    } else {
+      enviarNotificacion(userId, {
+        titulo:  'Notificación del Colegio',
+        mensaje: 'Tenés un mensaje importante del Colegio de Diseñadores Gráficos.',
+        tipo:    'info',
+        leida:   false,
+      });
+    }
+  };
+
+  // FIX: usa enviarNotificacionMasiva (1 request) en lugar de N requests con loop
+  const handleEnviarNotificacionMasiva = async () => {
     const titulo  = notifTitulo.trim();
     const mensaje = notifMensaje.trim();
     if (!titulo || !mensaje || usuarios.length === 0) return;
-    usuarios.forEach((u) => {
-      enviarNotificacion(u.id, { titulo, mensaje, tipo: notifTipo, leida: false });
-    });
-    toast.success(`Notificación enviada a ${usuarios.length} usuario${usuarios.length === 1 ? '' : 's'}`);
-    setNotifTitulo('');
-    setNotifMensaje('');
-    setNotifTipo('info');
+    setEnviandoMasiva(true);
+    try {
+      await enviarNotificacionMasiva({ titulo, mensaje, tipo: notifTipo, leida: false });
+      setNotifTitulo('');
+      setNotifMensaje('');
+      setNotifTipo('info');
+    } finally {
+      setEnviandoMasiva(false);
+    }
   };
 
   const stats = [
@@ -100,13 +140,23 @@ export function AdminDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-500 text-sm">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1"><AnimatedCounter value={stat.value} prefix={stat.prefix} /></p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">
+                  <AnimatedCounter value={stat.value} prefix={stat.prefix} />
+                </p>
               </div>
-              <div className={`p-3 rounded-xl ${stat.color}`}><stat.icon className="w-6 h-6" /></div>
+              <div className={`p-3 rounded-xl ${stat.color}`}>
+                <stat.icon className="w-6 h-6" />
+              </div>
             </div>
           </motion.div>
         ))}
@@ -114,10 +164,10 @@ export function AdminDashboard() {
 
       <Tabs defaultValue="usuarios" className="w-full">
         <TabsList className="grid w-full grid-cols-4 mb-6 bg-sky-50">
-          <TabsTrigger value="usuarios"      className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Users className="w-4 h-4 mr-2" />Usuarios</TabsTrigger>
-          <TabsTrigger value="configuracion" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Settings className="w-4 h-4 mr-2" />Configuración</TabsTrigger>
+          <TabsTrigger value="usuarios"      className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Users    className="w-4 h-4 mr-2" />Usuarios</TabsTrigger>
+          <TabsTrigger value="configuracion" className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><Settings  className="w-4 h-4 mr-2" />Configuración</TabsTrigger>
           <TabsTrigger value="finanzas"      className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><TrendingUp className="w-4 h-4 mr-2" />Finanzas</TabsTrigger>
-          <TabsTrigger value="contenido"     className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><FileEdit className="w-4 h-4 mr-2" />Contenido</TabsTrigger>
+          <TabsTrigger value="contenido"     className="data-[state=active]:bg-[#0ea5e9] data-[state=active]:text-white"><FileEdit   className="w-4 h-4 mr-2" />Contenido</TabsTrigger>
         </TabsList>
 
         {/* ── Usuarios ── */}
@@ -125,11 +175,18 @@ export function AdminDashboard() {
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input placeholder="Buscar por nombre, matrícula o ciudad..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              <Input
+                placeholder="Buscar por nombre, matrícula o ciudad..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"><Plus className="w-4 h-4 mr-2" />Nuevo Usuario</Button>
+                <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white">
+                  <Plus className="w-4 h-4 mr-2" />Nuevo Usuario
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Crear Nuevo Usuario Matriculado</DialogTitle></DialogHeader>
@@ -143,14 +200,18 @@ export function AdminDashboard() {
                     <Label>Ciudad</Label>
                     <Select value={newUserData.ciudad} onValueChange={(value) => setNewUserData({ ...newUserData, ciudad: value })}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                      <SelectContent className="max-h-60">{municipiosMisiones.map((m) => (<SelectItem key={m.id} value={m.nombre}>{m.nombre}</SelectItem>))}</SelectContent>
+                      <SelectContent className="max-h-60">
+                        {municipiosMisiones.map((m) => (<SelectItem key={m.id} value={m.nombre}>{m.nombre}</SelectItem>))}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label>Celular</Label><Input value={newUserData.celular} onChange={(e) => setNewUserData({ ...newUserData, celular: e.target.value })} /></div>
                   <div className="space-y-2"><Label>Domicilio</Label><Input value={newUserData.domicilio} onChange={(e) => setNewUserData({ ...newUserData, domicilio: e.target.value })} /></div>
-                  <div className="space-y-2 md:col-span-2"><Label>Contraseña</Label><Input type="password" value={newUserData.password} onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })} /></div>
+                  <div className="space-y-2 md:col-span-2"><Label>Contraseña temporal</Label><Input type="password" value={newUserData.password} onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })} /></div>
                 </div>
-                <Button onClick={handleCreateUser} className="w-full bg-[#0ea5e9] hover:bg-[#0284c7] text-white">Crear Usuario</Button>
+                <Button onClick={handleCreateUser} className="w-full bg-[#0ea5e9] hover:bg-[#0284c7] text-white">
+                  Crear Usuario y Enviar Email de Bienvenida
+                </Button>
               </DialogContent>
             </Dialog>
           </div>
@@ -159,8 +220,12 @@ export function AdminDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nombre</TableHead><TableHead>Matrícula</TableHead><TableHead>Ciudad</TableHead>
-                  <TableHead>Estado</TableHead><TableHead>Pago</TableHead><TableHead>Acciones</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Matrícula</TableHead>
+                  <TableHead>Ciudad</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Pago</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -173,15 +238,29 @@ export function AdminDashboard() {
                     <TableCell><StatusBadge status={usuario.estadoPago} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditUser(usuario)} title="Editar"><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleEditUser(usuario)} title="Editar datos">
+                          <Edit className="w-4 h-4" />
+                        </Button>
                         {usuario.estadoPago === 'deuda' && (
                           <>
-                            <Button variant="ghost" size="sm" onClick={() => actualizarEstadoPago(usuario.id, 'al_dia')} title="Marcar pagado"><CheckCircle className="w-4 h-4 text-emerald-500" /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleEnviarNotificacion(usuario.id, 'pago')} title="Recordatorio"><Bell className="w-4 h-4 text-amber-500" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => actualizarEstadoPago(usuario.id, 'al_dia')} title="Marcar como pagado">
+                              <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnviarNotificacion(usuario.id, 'pago')} title="Enviar recordatorio de pago">
+                              <Bell className="w-4 h-4 text-amber-500" />
+                            </Button>
                           </>
                         )}
-                        {usuario.estado === 'activo'    && <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'suspendido')} title="Suspender"><Ban   className="w-4 h-4 text-red-500" /></Button>}
-                        {usuario.estado === 'suspendido' && <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'activo')}     title="Activar" ><Power className="w-4 h-4 text-emerald-500" /></Button>}
+                        {usuario.estado === 'activo' && (
+                          <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'suspendido')} title="Suspender usuario">
+                            <Ban className="w-4 h-4 text-red-500" />
+                          </Button>
+                        )}
+                        {usuario.estado === 'suspendido' && (
+                          <Button variant="ghost" size="sm" onClick={() => actualizarEstadoUsuario(usuario.id, 'activo')} title="Activar usuario">
+                            <Power className="w-4 h-4 text-emerald-500" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -198,34 +277,59 @@ export function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Precio Matrícula ($)</Label>
-                <Input type="number" value={configuracion.precioMatricula} onChange={(e) => updateConfiguracion({ precioMatricula: Number(e.target.value) })} />
+                <Input
+                  type="number"
+                  value={configuracion.precioMatricula}
+                  onChange={(e) => updateConfiguracion({ precioMatricula: Number(e.target.value) })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Fecha Inicio Pago</Label>
-                <Input type="date" value={configuracion.fechaInicioPago} onChange={(e) => updateConfiguracion({ fechaInicioPago: e.target.value })} />
+                <Input
+                  type="date"
+                  value={configuracion.fechaInicioPago}
+                  onChange={(e) => updateConfiguracion({ fechaInicioPago: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Fecha Vencimiento</Label>
-                <Input type="date" value={configuracion.fechaVencimientoPago} onChange={(e) => updateConfiguracion({ fechaVencimientoPago: e.target.value })} />
+                <Input
+                  type="date"
+                  value={configuracion.fechaVencimientoPago}
+                  onChange={(e) => updateConfiguracion({ fechaVencimientoPago: e.target.value })}
+                />
               </div>
             </div>
           </motion.div>
 
-          {/* Notificación masiva */}
+          {/* Notificación masiva — FIX: usa 1 request al backend */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
             <div className="flex items-center gap-2 mb-1">
               <Bell className="w-5 h-5 text-[#0284c7]" />
-              <h3 className="text-lg font-semibold">Enviar Notificación Personalizada</h3>
+              <h3 className="text-lg font-semibold">Enviar Notificación a Todos</h3>
             </div>
-            <p className="text-sm text-gray-500 mb-4">Llegará al panel de notificaciones de todos los usuarios matriculados.</p>
+            <p className="text-sm text-gray-500 mb-4">
+              Llegará al panel de notificaciones de todos los usuarios matriculados de forma inmediata.
+            </p>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Título</Label>
-                <Input placeholder="Ej: Asamblea anual del Colegio" value={notifTitulo} onChange={(e) => setNotifTitulo(e.target.value)} maxLength={120} />
+                <Input
+                  placeholder="Ej: Asamblea anual del Colegio"
+                  value={notifTitulo}
+                  onChange={(e) => setNotifTitulo(e.target.value)}
+                  maxLength={120}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Mensaje</Label>
-                <Textarea placeholder="Escribí el contenido de la notificación..." value={notifMensaje} onChange={(e) => setNotifMensaje(e.target.value)} rows={5} maxLength={1000} />
+                <Textarea
+                  placeholder="Escribí el contenido de la notificación..."
+                  value={notifMensaje}
+                  onChange={(e) => setNotifMensaje(e.target.value)}
+                  rows={5}
+                  maxLength={1000}
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -249,10 +353,11 @@ export function AdminDashboard() {
               <div className="flex justify-end">
                 <Button
                   onClick={handleEnviarNotificacionMasiva}
-                  disabled={!notifTitulo.trim() || !notifMensaje.trim() || usuarios.length === 0}
-                  className="bg-[#0284c7] hover:bg-[#0369a1] text-white"
+                  disabled={!notifTitulo.trim() || !notifMensaje.trim() || usuarios.length === 0 || enviandoMasiva}
+                  className="bg-[#0284c7] hover:bg-[#0369a1] text-white disabled:opacity-60"
                 >
-                  <Bell className="w-4 h-4 mr-2" /> Enviar a todos
+                  <Bell className="w-4 h-4 mr-2" />
+                  {enviandoMasiva ? 'Enviando...' : 'Enviar a todos'}
                 </Button>
               </div>
             </div>
@@ -276,16 +381,20 @@ export function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="p-4 bg-emerald-50 rounded-xl">
                 <p className="text-emerald-600 text-sm">Recaudado ({periodoConfig[periodoFinanzas].label})</p>
-                <p className="text-2xl font-bold text-emerald-700">${recaudadoPeriodo.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-emerald-700">${recaudadoPeriodo.toLocaleString('es-AR')}</p>
               </div>
               <div className="p-4 bg-red-50 rounded-xl">
-                <p className="text-red-600 text-sm">Pendiente</p>
-                <p className="text-2xl font-bold text-red-700">${(usuariosDeudores.length * configuracion.precioMatricula).toLocaleString()}</p>
+                <p className="text-red-600 text-sm">Pendiente de cobro</p>
+                <p className="text-2xl font-bold text-red-700">
+                  ${(usuariosDeudores.length * configuracion.precioMatricula).toLocaleString('es-AR')}
+                </p>
               </div>
               <div className="p-4 bg-sky-50 rounded-xl">
-                <p className="text-[#0284c7] text-sm">Al día</p>
+                <p className="text-[#0284c7] text-sm">% al día</p>
                 <p className="text-2xl font-bold text-[#0284c7]">
-                  {usuarios.length > 0 ? Math.round((usuariosActivos.filter(u => u.estadoPago === 'al_dia').length / usuarios.length) * 100) : 0}%
+                  {usuarios.length > 0
+                    ? Math.round((usuariosActivos.filter(u => u.estadoPago === 'al_dia').length / usuarios.length) * 100)
+                    : 0}%
                 </p>
               </div>
             </div>
@@ -298,7 +407,11 @@ export function AdminDashboard() {
         </TabsContent>
       </Tabs>
 
-      <UserEditDialog usuario={selectedUser} isOpen={isEditDialogOpen} onClose={() => setIsEditDialogOpen(false)} />
+      <UserEditDialog
+        usuario={selectedUser}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+      />
     </div>
   );
 }

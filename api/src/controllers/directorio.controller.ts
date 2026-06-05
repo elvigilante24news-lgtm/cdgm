@@ -6,14 +6,13 @@ export const listarDirectorio = async (req: AuthRequest, res: Response): Promise
   try {
     const { nombre, matricula, ciudad } = req.query as DirectorioQueryParams;
 
-    // Construir condiciones de busqueda
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const whereConditions: any = {
+      tipo: 'matriculado',   // ← Solo matriculados (excluye admins)
       estado: 'activo',
       estado_pago: 'al_dia',
     };
 
-    // Filtro por nombre (busca en nombre y apellido)
     if (nombre) {
       whereConditions.OR = [
         { nombre: { contains: nombre, mode: 'insensitive' } },
@@ -21,12 +20,10 @@ export const listarDirectorio = async (req: AuthRequest, res: Response): Promise
       ];
     }
 
-    // Filtro por matricula
     if (matricula) {
       whereConditions.numero_matricula = { contains: matricula, mode: 'insensitive' };
     }
 
-    // Filtro por ciudad
     if (ciudad) {
       whereConditions.ciudad = { contains: ciudad, mode: 'insensitive' };
     }
@@ -37,6 +34,8 @@ export const listarDirectorio = async (req: AuthRequest, res: Response): Promise
         id: true,
         nombre: true,
         apellido: true,
+        email: true,       // ← Incluido para mostrar en la tarjeta
+        celular: true,     // ← Incluido para mostrar en la tarjeta
         ciudad: true,
         estudio: true,
         foto_perfil: true,
