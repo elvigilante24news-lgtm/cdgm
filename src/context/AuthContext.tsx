@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mensaje: notificacion.mensaje,
         tipo: notificacion.tipo,
       });
-      // FIX: no recargar getAll() después de cada notificación individual
+      toast.success('Recordatorio enviado ✓');
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar notificación');
     }

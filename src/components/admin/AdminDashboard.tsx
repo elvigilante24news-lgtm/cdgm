@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle,
-  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit,
+  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,8 @@ export function AdminDashboard() {
   const [notifMensaje, setNotifMensaje] = useState('');
   const [notifTipo, setNotifTipo]       = useState<'info' | 'warning' | 'success'>('info');
   const [enviandoMasiva, setEnviandoMasiva] = useState(false);
+  // id del usuario cuyo recordatorio individual está en vuelo
+  const [sendingBellId, setSendingBellId]   = useState<string | null>(null);
 
   const usuarios          = getUsuariosMatriculados();
   const usuariosFiltrados = usuarios.filter((u) =>
@@ -94,21 +96,26 @@ export function AdminDashboard() {
     setIsEditDialogOpen(true);
   };
 
-  const handleEnviarNotificacion = (userId: string, tipo: 'pago' | 'general') => {
-    if (tipo === 'pago') {
-      enviarNotificacion(userId, {
-        titulo:  'Recordatorio de Pago',
-        mensaje: `Tu matrícula venció. Por favor realizá el pago de $${configuracion.precioMatricula.toLocaleString('es-AR')}.`,
-        tipo:    'warning',
-        leida:   false,
-      });
-    } else {
-      enviarNotificacion(userId, {
-        titulo:  'Notificación del Colegio',
-        mensaje: 'Tenés un mensaje importante del Colegio de Diseñadores Gráficos.',
-        tipo:    'info',
-        leida:   false,
-      });
+  const handleEnviarNotificacion = async (userId: string, tipo: 'pago' | 'general') => {
+    setSendingBellId(userId);
+    try {
+      if (tipo === 'pago') {
+        await enviarNotificacion(userId, {
+          titulo:  'Recordatorio de Pago',
+          mensaje: `Tu matrícula venció. Por favor realizá el pago de $${configuracion.precioMatricula.toLocaleString('es-AR')}.`,
+          tipo:    'warning',
+          leida:   false,
+        });
+      } else {
+        await enviarNotificacion(userId, {
+          titulo:  'Notificación del Colegio',
+          mensaje: 'Tenés un mensaje importante del Colegio de Diseñadores Gráficos.',
+          tipo:    'info',
+          leida:   false,
+        });
+      }
+    } finally {
+      setSendingBellId(null);
     }
   };
 
@@ -246,8 +253,17 @@ export function AdminDashboard() {
                             <Button variant="ghost" size="sm" onClick={() => actualizarEstadoPago(usuario.id, 'al_dia')} title="Marcar como pagado">
                               <CheckCircle className="w-4 h-4 text-emerald-500" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleEnviarNotificacion(usuario.id, 'pago')} title="Enviar recordatorio de pago">
-                              <Bell className="w-4 h-4 text-amber-500" />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEnviarNotificacion(usuario.id, 'pago')}
+                              disabled={sendingBellId === usuario.id}
+                              title="Enviar recordatorio de pago"
+                            >
+                              {sendingBellId === usuario.id
+                                ? <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                                : <Bell className="w-4 h-4 text-amber-500" />
+                              }
                             </Button>
                           </>
                         )}
