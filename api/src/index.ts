@@ -18,13 +18,27 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 // ============================================
 // CORS
 // ============================================
+// FIX: ahora soporta múltiples dominios (el viejo subdominio de Ferozo
+// y el dominio propio cdgm.org.ar), y permite agregar más vía FRONTEND_URL
+// separados por coma sin tocar código en el futuro.
 const allowedOrigins = [
   'http://localhost:5173',
   'https://c2851498.ferozo.com',
   'http://c2851498.ferozo.com',
+  'https://cdgm.org.ar',
+  'http://cdgm.org.ar',
+  'https://www.cdgm.org.ar',
+  'http://www.cdgm.org.ar',
 ];
 
-if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
+if (process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL.split(',')
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .forEach((url) => {
+      if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
+    });
+}
 
 app.use(cors({
   origin: (origin, callback) => {
