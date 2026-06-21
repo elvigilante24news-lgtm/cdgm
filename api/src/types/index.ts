@@ -70,6 +70,7 @@ export interface CreateNotificacionInput {
   titulo: string;
   mensaje: string;
   tipo?: 'info' | 'warning' | 'success' | 'error';
+  enviarEmail?: boolean; // FIX: si es true, además del registro interno se envía el email real (Resend)
 }
 
 export interface UpdateConfiguracionInput {

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, CreateNotificacionInput } from '../types';
+import { sendPaymentReminderEmail } from '../services/email.service'; // FIX: envío real de email para recordatorios
 
 export const listarNotificaciones = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -56,7 +57,7 @@ export const marcarComoLeida = async (req: AuthRequest, res: Response): Promise<
 
 export const crearNotificacion = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, titulo, mensaje, tipo } = req.body as CreateNotificacionInput;
+    const { userId, titulo, mensaje, tipo, enviarEmail } = req.body as CreateNotificacionInput;
 
     if (!userId || !titulo || !mensaje) {
       res.status(400).json({ success: false, error: 'userId, titulo y mensaje son requeridos' });
@@ -77,6 +78,18 @@ export const crearNotificacion = async (req: AuthRequest, res: Response): Promis
         tipo: tipo || 'info',
       },
     });
+
+    // FIX: si se solicita explícitamente, además del registro interno se envía el email real
+    // (usado por el botón "recordatorio de pago" del admin — no bloquea la respuesta si falla)
+    if (enviarEmail) {
+      sendPaymentReminderEmail({
+        to: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        montoDeuda: user.monto_deuda ?? 0,
+        fechaVencimiento: user.fecha_vencimiento,
+      }).catch((err) => console.error('Email de recordatorio falló:', err));
+    }
 
     res.status(201).json({ success: true, data: notificacion, message: 'Notificacion enviada correctamente' });
   } catch (error) {
