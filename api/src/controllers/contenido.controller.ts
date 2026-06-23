@@ -110,3 +110,47 @@ export const actualizarDashboardContent = async (req: AuthRequest, res: Response
     res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 };
+
+// FIX: el frontend llamaba a PUT /contenido (sin sufijo) con { home_content, dashboard_content }
+// en snake_case combinados, pero esa ruta nunca existió — solo existían /home y /dashboard por
+// separado, con nombres de campo distintos (homeContent/dashboardContent). Resultado: 404 silencioso
+// en cada intento de guardar, atrapado por el catch de saveToAPI sin mostrar error al usuario.
+export const actualizarContenidoCompleto = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { home_content, dashboard_content } = req.body as { home_content?: object; dashboard_content?: object };
+
+    if (!home_content && !dashboard_content) {
+      res.status(400).json({ success: false, error: 'Se requiere home_content y/o dashboard_content' });
+      return;
+    }
+
+    let contenido = await prisma.contenidoWeb.findFirst();
+
+    if (!contenido) {
+      contenido = await prisma.contenidoWeb.create({
+        data: {
+          home_content: home_content ?? {},
+          dashboard_content: dashboard_content ?? {},
+        },
+      });
+    } else {
+      const updateData: Record<string, object> = {};
+      if (home_content !== undefined) updateData.home_content = home_content;
+      if (dashboard_content !== undefined) updateData.dashboard_content = dashboard_content;
+
+      contenido = await prisma.contenidoWeb.update({
+        where: { id: contenido.id },
+        data: updateData,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { home_content: contenido.home_content, dashboard_content: contenido.dashboard_content },
+      message: 'Contenido actualizado correctamente',
+    });
+  } catch (error) {
+    console.error('Error actualizando contenido completo:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+};

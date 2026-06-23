@@ -29,8 +29,8 @@ export interface DashboardContent {
 interface ContentContextType {
   homeContent: HomeContent;
   dashboardContent: DashboardContent;
-  updateHomeContent: (content: Partial<HomeContent>) => void;
-  updateDashboardContent: (content: Partial<DashboardContent>) => void;
+  updateHomeContent: (content: Partial<HomeContent>) => Promise<boolean>;
+  updateDashboardContent: (content: Partial<DashboardContent>) => Promise<boolean>;
   updateHomeHero: (hero: Partial<HomeContent['hero']>) => void;
   updateHomePreviewCards: (cards: Partial<HomeContent['previewCards']>) => void;
   updateHomeFooter: (footer: Partial<HomeContent['footer']>) => void;
@@ -74,16 +74,19 @@ const defaultDashboardContent: DashboardContent = {
 const ContentContext = createContext<ContentContextType | undefined>(undefined);
 
 // Save content to API (reads token from localStorage)
-async function saveToAPI(home: HomeContent, dash: DashboardContent) {
+// FIX: ahora devuelve si tuvo éxito o no, para que el llamador pueda informar al usuario
+async function saveToAPI(home: HomeContent, dash: DashboardContent): Promise<boolean> {
   const token = localStorage.getItem('cdg_token');
-  if (!token) return;
+  if (!token) return false;
   try {
     await contenidoApi.update(token, {
       home_content: home,
       dashboard_content: dash,
     });
+    return true;
   } catch (err) {
     console.error('Error saving content:', err);
+    return false;
   }
 }
 
@@ -124,20 +127,17 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     if (loaded) localStorage.setItem('cdg_dashboard_content', JSON.stringify(dashboardContent));
   }, [dashboardContent, loaded]);
 
-  const updateHomeContent = (content: Partial<HomeContent>) => {
-    setHomeContent(prev => {
-      const next = { ...prev, ...content };
-      saveToAPI(next, dashboardContent);
-      return next;
-    });
+  // FIX: ahora async — devuelve si el guardado en el backend tuvo éxito
+  const updateHomeContent = async (content: Partial<HomeContent>): Promise<boolean> => {
+    const next = { ...homeContent, ...content };
+    setHomeContent(next);
+    return saveToAPI(next, dashboardContent);
   };
 
-  const updateDashboardContent = (content: Partial<DashboardContent>) => {
-    setDashboardContent(prev => {
-      const next = { ...prev, ...content };
-      saveToAPI(homeContent, next);
-      return next;
-    });
+  const updateDashboardContent = async (content: Partial<DashboardContent>): Promise<boolean> => {
+    const next = { ...dashboardContent, ...content };
+    setDashboardContent(next);
+    return saveToAPI(homeContent, next);
   };
 
   const updateHomeHero = (hero: Partial<HomeContent['hero']>) => {

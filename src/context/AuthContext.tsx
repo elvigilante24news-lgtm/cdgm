@@ -28,6 +28,7 @@ interface AuthContextType {
   crearUsuario: (userData: Omit<User, 'id' | 'notificaciones'> & { password: string }) => Promise<User>;
   actualizarEstadoPago: (userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number) => Promise<void>;
   actualizarEstadoUsuario: (userId: string, estado: 'activo' | 'suspendido' | 'baja') => Promise<void>;
+  eliminarUsuario: (userId: string) => Promise<boolean>;
   iniciarPagoMercadoPago: () => Promise<void>;
   configuracion: ConfiguracionSistema;
   updateConfiguracion: (config: Partial<ConfiguracionSistema>) => Promise<void>;
@@ -291,6 +292,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // FIX: nuevo — elimina al usuario definitivamente. Devuelve true/false para que
+  // el componente sepa si debe cerrar el diálogo de confirmación o mostrar el error.
+  const eliminarUsuario = async (userId: string): Promise<boolean> => {
+    if (!token) return false;
+    try {
+      await usersApi.delete(token, userId);
+      setUsuarios(prev => prev.filter(u => u.id !== userId));
+      toast.success('Usuario eliminado correctamente');
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Error al eliminar el usuario');
+      return false;
+    }
+  };
+
   const actualizarEstadoPago = async (
     userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number
   ) => {
@@ -382,7 +398,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         enviarNotificacion,
         enviarNotificacionMasiva,
         crearUsuario,
-        actualizarEstadoPago, actualizarEstadoUsuario,
+        actualizarEstadoPago, actualizarEstadoUsuario, eliminarUsuario,
         iniciarPagoMercadoPago,
         configuracion, updateConfiguracion,
         getUsuariosMatriculados, getUsuariosAlDia,

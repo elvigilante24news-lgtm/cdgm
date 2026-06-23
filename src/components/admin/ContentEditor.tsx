@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, RotateCcw, Type, CreditCard, Home, LayoutDashboard } from 'lucide-react';
+import { Save, RotateCcw, Type, CreditCard, Home, LayoutDashboard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,11 @@ import { useContent } from '@/context/ContentContext';
 import { toast } from 'sonner';
 
 export function ContentEditor() {
-  const { homeContent, dashboardContent, updateHomeHero, updateHomePreviewCards, updateHomeFooter, updateDashboardWelcome, updateDashboardCards } = useContent();
+  // FIX: ya no usamos las funciones granulares (updateHomeHero/Cards/Footer) —
+  // disparaban 3 requests separados por click de "Guardar", y al llegar fuera de
+  // orden uno podía pisar a otro con datos viejos. Ahora todo el bloque "home" o
+  // "dashboard" se guarda en una sola llamada atómica.
+  const { homeContent, dashboardContent, updateHomeContent, updateDashboardContent } = useContent();
 
   const [hero, setHero] = useState(homeContent.hero);
   const [previewCards, setPreviewCards] = useState(homeContent.previewCards);
@@ -18,17 +22,35 @@ export function ContentEditor() {
   const [welcome, setWelcome] = useState(dashboardContent.welcome);
   const [cards, setCards] = useState(dashboardContent.cards);
 
-  const handleSaveHome = () => {
-    updateHomeHero(hero);
-    updateHomePreviewCards(previewCards);
-    updateHomeFooter(footer);
-    toast.success('Contenido de la página de inicio guardado exitosamente');
+  const [isSavingHome, setIsSavingHome] = useState(false);
+  const [isSavingDashboard, setIsSavingDashboard] = useState(false);
+
+  const handleSaveHome = async () => {
+    setIsSavingHome(true);
+    try {
+      const ok = await updateHomeContent({ hero, previewCards, footer });
+      if (ok) {
+        toast.success('Contenido de la página de inicio guardado exitosamente');
+      } else {
+        toast.error('No se pudo guardar. Verificá tu conexión e intentá nuevamente.');
+      }
+    } finally {
+      setIsSavingHome(false);
+    }
   };
 
-  const handleSaveDashboard = () => {
-    updateDashboardWelcome(welcome);
-    updateDashboardCards(cards);
-    toast.success('Contenido del dashboard guardado exitosamente');
+  const handleSaveDashboard = async () => {
+    setIsSavingDashboard(true);
+    try {
+      const ok = await updateDashboardContent({ welcome, cards });
+      if (ok) {
+        toast.success('Contenido del dashboard guardado exitosamente');
+      } else {
+        toast.error('No se pudo guardar. Verificá tu conexión e intentá nuevamente.');
+      }
+    } finally {
+      setIsSavingDashboard(false);
+    }
   };
 
   const handleResetHome = () => {
@@ -82,7 +104,10 @@ export function ContentEditor() {
           </motion.div>
 
           <div className="flex gap-3">
-            <Button onClick={handleSaveHome} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"><Save className="w-4 h-4 mr-2" />Guardar</Button>
+            <Button onClick={handleSaveHome} disabled={isSavingHome} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white disabled:opacity-60">
+              {isSavingHome ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {isSavingHome ? 'Guardando...' : 'Guardar'}
+            </Button>
             <Button onClick={handleResetHome} variant="outline"><RotateCcw className="w-4 h-4 mr-2" />Descartar</Button>
           </div>
         </TabsContent>
@@ -96,7 +121,10 @@ export function ContentEditor() {
             </div>
           </motion.div>
           <div className="flex gap-3">
-            <Button onClick={handleSaveDashboard} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"><Save className="w-4 h-4 mr-2" />Guardar</Button>
+            <Button onClick={handleSaveDashboard} disabled={isSavingDashboard} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white disabled:opacity-60">
+              {isSavingDashboard ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {isSavingDashboard ? 'Guardando...' : 'Guardar'}
+            </Button>
             <Button onClick={handleResetDashboard} variant="outline"><RotateCcw className="w-4 h-4 mr-2" />Descartar</Button>
           </div>
         </TabsContent>

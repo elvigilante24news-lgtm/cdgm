@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, CreateNotificacionInput } from '../types';
-import { sendPaymentReminderEmail } from '../services/email.service'; // FIX: envío real de email para recordatorios
+import { sendPaymentReminderEmail, sendGenericNotificationEmail } from '../services/email.service'; // FIX: envío real de email
 
 export const listarNotificaciones = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -110,7 +110,7 @@ export const crearNotificacionMasiva = async (req: AuthRequest, res: Response): 
 
     const matriculados = await prisma.user.findMany({
       where: { tipo: 'matriculado' },
-      select: { id: true },
+      select: { id: true, email: true, nombre: true }, // FIX: necesitamos email y nombre para mandar el mail
     });
 
     if (matriculados.length === 0) {
@@ -125,6 +125,18 @@ export const crearNotificacionMasiva = async (req: AuthRequest, res: Response): 
         mensaje: mensaje.trim(),
         tipo: (tipo || 'info') as 'info' | 'warning' | 'success',
       })),
+    });
+
+    // FIX: antes solo se guardaba en la DB — ahora también se manda el email real a cada matriculado
+    // (no se espera el envío para responder; se loguean errores individuales sin bloquear el resto)
+    matriculados.forEach((u) => {
+      sendGenericNotificationEmail({
+        to: u.email,
+        nombre: u.nombre,
+        titulo: titulo.trim(),
+        mensaje: mensaje.trim(),
+        tipo: (tipo || 'info') as 'info' | 'warning' | 'success' | 'error',
+      }).catch((err) => console.error(`Email de notificacion masiva falló para ${u.email}:`, err));
     });
 
     res.status(201).json({

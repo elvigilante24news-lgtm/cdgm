@@ -1,17 +1,53 @@
 import { motion } from 'framer-motion';
 import { Users, Settings, FileText, HelpCircle, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useContent } from '@/context/ContentContext';
+import { toast } from 'sonner';
 
-const accessItems = [
-  { icon: Users, label: 'Directorio de Profesionales', description: 'Ver colegas matriculados', href: '/directorio', color: 'bg-sky-50 text-[#0284c7]' },
-  { icon: FileText, label: 'Tarifario', description: 'Consultar tarifas de referencia', href: 'https://tarifario-cdgm-fb81aaf4.vercel.app/', external: true, color: 'bg-emerald-50 text-emerald-600' },
-  { icon: HelpCircle, label: 'Ayuda y Soporte', description: 'Preguntas frecuentes', href: '#', color: 'bg-amber-50 text-amber-600' },
-  { icon: Settings, label: 'Configuración', description: 'Gestionar tu cuenta', href: '#datos-personales', color: 'bg-purple-50 text-purple-600' },
+// FIX: cada item ahora declara cómo navegar — antes todos usaban <a href> plano,
+// lo cual rompe con HashRouter: "/directorio" se interpreta como ruta real del dominio
+// (404) y "#datos-personales" se interpreta como una ruta nueva del router (también rompe).
+type AccessAction =
+  | { kind: 'route'; to: string }       // navegación interna del router (react-router)
+  | { kind: 'anchor'; id: string }      // scroll suave a un elemento de la misma página
+  | { kind: 'external'; href: string }  // link externo real
+  | { kind: 'soon' };                   // placeholder, todavía sin funcionalidad
+
+const accessItems: Array<{
+  icon: typeof Users;
+  label: string;
+  description: string;
+  color: string;
+  action: AccessAction;
+}> = [
+  { icon: Users,      label: 'Directorio de Profesionales', description: 'Ver colegas matriculados',         color: 'bg-sky-50 text-[#0284c7]',    action: { kind: 'route', to: '/directorio' } },
+  { icon: FileText,   label: 'Tarifario',                   description: 'Consultar tarifas de referencia',  color: 'bg-emerald-50 text-emerald-600', action: { kind: 'external', href: 'https://tarifario-cdgm-fb81aaf4.vercel.app/' } },
+  { icon: HelpCircle, label: 'Ayuda y Soporte',              description: 'Preguntas frecuentes',             color: 'bg-amber-50 text-amber-600',  action: { kind: 'soon' } },
+  { icon: Settings,   label: 'Configuración',                description: 'Gestionar tu cuenta',              color: 'bg-purple-50 text-purple-600', action: { kind: 'anchor', id: 'datos-personales' } },
 ];
 
 export function QuickAccessCard() {
   const { dashboardContent } = useContent();
   const { cards } = dashboardContent;
+  const navigate = useNavigate();
+
+  const handleClick = (action: AccessAction, e: React.MouseEvent) => {
+    e.preventDefault();
+    switch (action.kind) {
+      case 'route':
+        navigate(action.to); // FIX: navegación real del router, funciona con HashRouter
+        break;
+      case 'anchor':
+        document.getElementById(action.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); // FIX: scroll en lugar de cambiar la URL
+        break;
+      case 'external':
+        window.open(action.href, '_blank', 'noopener,noreferrer');
+        break;
+      case 'soon':
+        toast.info('Próximamente disponible');
+        break;
+    }
+  };
 
   return (
     <motion.div
@@ -27,9 +63,8 @@ export function QuickAccessCard() {
         {accessItems.map((item, index) => (
           <motion.a
             key={item.label}
-            href={item.href}
-            target={item.external ? '_blank' : undefined}
-            rel={item.external ? 'noopener noreferrer' : undefined}
+            href="#"
+            onClick={(e) => handleClick(item.action, e)}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.6 + index * 0.1 }}

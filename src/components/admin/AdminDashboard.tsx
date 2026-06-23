@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle,
-  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit, Loader2,
+  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit, Loader2, Trash2,
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,16 +33,44 @@ export function AdminDashboard() {
     enviarNotificacionMasiva, // FIX: usa el método masivo (1 request) en vez del loop N+1
     actualizarEstadoPago,
     actualizarEstadoUsuario,
+    eliminarUsuario,
   } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen]     = useState(false);
+  // FIX: nuevo — usuario seleccionado para eliminar + estado de carga del borrado
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting]     = useState(false);
   const [selectedUser, setSelectedUser]             = useState<User | null>(null);
   const [newUserData, setNewUserData] = useState({
     nombre: '', apellido: '', email: '', dni: '',
     ciudad: '', celular: '', domicilio: '', numeroMatricula: '', password: '',
   });
+
+  // FIX: borrador local de la configuración — ya no se guarda en cada tecla,
+  // solo al tocar "Guardar cambios" (antes cada input disparaba un PUT inmediato,
+  // lo que causaba carreras entre requests y la sensación de que "no funcionaba")
+  const [configDraft, setConfigDraft] = useState(configuracion);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  useEffect(() => {
+    setConfigDraft(configuracion);
+  }, [configuracion]);
+
+  const configHasChanges =
+    configDraft.precioMatricula      !== configuracion.precioMatricula ||
+    configDraft.fechaInicioPago      !== configuracion.fechaInicioPago ||
+    configDraft.fechaVencimientoPago !== configuracion.fechaVencimientoPago;
+
+  const handleGuardarConfiguracion = async () => {
+    setIsSavingConfig(true);
+    try {
+      await updateConfiguracion(configDraft);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   // ── Finanzas: filtro de período ───────────────────────────────────────────
   const [periodoFinanzas, setPeriodoFinanzas] = useState('historico');
@@ -94,6 +126,18 @@ export function AdminDashboard() {
   const handleEditUser = (usuario: User) => {
     setSelectedUser(usuario);
     setIsEditDialogOpen(true);
+  };
+
+  // FIX: nuevo — confirma y ejecuta la eliminación del usuario seleccionado
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+    try {
+      const ok = await eliminarUsuario(userToDelete.id);
+      if (ok) setUserToDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleEnviarNotificacion = async (userId: string, tipo: 'pago' | 'general') => {
@@ -277,6 +321,10 @@ export function AdminDashboard() {
                             <Power className="w-4 h-4 text-emerald-500" />
                           </Button>
                         )}
+                        {/* FIX: nuevo — eliminar usuario, con confirmación antes de ejecutar */}
+                        <Button variant="ghost" size="sm" onClick={() => setUserToDelete(usuario)} title="Eliminar usuario">
+                          <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-600" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -289,32 +337,45 @@ export function AdminDashboard() {
         {/* ── Configuración ── */}
         <TabsContent value="configuracion" className="space-y-4">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100 border border-gray-100">
-            <h3 className="text-lg font-semibold mb-4">Configuración del Sistema</h3>
+            <h3 className="text-lg font-semibold mb-1">Configuración del Sistema</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Estos valores aplican a todos los matriculados. Si un usuario no paga después de la fecha de vencimiento, su cuenta pasa automáticamente a "En deuda".
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Precio Matrícula ($)</Label>
                 <Input
                   type="number"
-                  value={configuracion.precioMatricula}
-                  onChange={(e) => updateConfiguracion({ precioMatricula: Number(e.target.value) })}
+                  value={configDraft.precioMatricula}
+                  onChange={(e) => setConfigDraft({ ...configDraft, precioMatricula: Number(e.target.value) })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Fecha Inicio Pago</Label>
                 <Input
                   type="date"
-                  value={configuracion.fechaInicioPago}
-                  onChange={(e) => updateConfiguracion({ fechaInicioPago: e.target.value })}
+                  value={configDraft.fechaInicioPago}
+                  onChange={(e) => setConfigDraft({ ...configDraft, fechaInicioPago: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Fecha Vencimiento</Label>
                 <Input
                   type="date"
-                  value={configuracion.fechaVencimientoPago}
-                  onChange={(e) => updateConfiguracion({ fechaVencimientoPago: e.target.value })}
+                  value={configDraft.fechaVencimientoPago}
+                  onChange={(e) => setConfigDraft({ ...configDraft, fechaVencimientoPago: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button
+                onClick={handleGuardarConfiguracion}
+                disabled={!configHasChanges || isSavingConfig}
+                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white disabled:opacity-60"
+              >
+                {isSavingConfig ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                {isSavingConfig ? 'Guardando...' : 'Guardar cambios'}
+              </Button>
             </div>
           </motion.div>
 
@@ -428,6 +489,30 @@ export function AdminDashboard() {
         isOpen={isEditDialogOpen}
         onClose={() => setIsEditDialogOpen(false)}
       />
+
+      {/* FIX: nuevo — confirmación antes de eliminar, ya que la acción es irreversible */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => { if (!open) setUserToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar a {userToDelete?.nombre} {userToDelete?.apellido}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente al usuario, su matrícula
+              ({userToDelete?.numeroMatricula || 'sin asignar'}) y todas sus notificaciones.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {isDeleting ? 'Eliminando...' : 'Eliminar definitivamente'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

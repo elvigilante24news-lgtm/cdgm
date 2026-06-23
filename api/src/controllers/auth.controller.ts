@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, LoginInput, ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput } from '../types';
 import { sendPasswordResetEmail } from '../services/email.service'; // FIX: recuperación de contraseña real
+import { marcarVencidosComoDeuda } from '../lib/vencimientos'; // FIX: vencimiento automático de matrícula
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const JWT_EXPIRES_IN = '7d';
@@ -77,6 +78,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    await marcarVencidosComoDeuda(); // FIX: refleja vencimientos reales antes de devolver los datos del usuario
+
     // Segunda query para obtener el usuario completo con notificaciones
     const user = await prisma.user.findUnique({
       where: { id: userRaw.id },
@@ -106,6 +109,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       res.status(401).json({ success: false, error: 'No autenticado' });
       return;
     }
+
+    await marcarVencidosComoDeuda(); // FIX: refleja vencimientos reales cada vez que el usuario abre su panel
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },

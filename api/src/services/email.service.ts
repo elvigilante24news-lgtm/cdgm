@@ -5,7 +5,10 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Dirección "from" configurable — registrá tu dominio en resend.com/domains
 // Mientras no tengas dominio propio verificado, usá: onboarding@resend.dev (solo para pruebas)
 const FROM_ADDRESS = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://c2851498.ferozo.com';
+// FIX: los botones de los emails deben apuntar a la app (portal-matriculados),
+// no solo al dominio raíz — FRONTEND_URL sigue usándose para CORS en index.ts.
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://cdgm.org.ar';
+const PORTAL_URL = `${FRONTEND_URL.replace(/\/$/, '')}/portal-matriculados/`;
 
 interface WelcomeEmailParams {
   to: string;
@@ -75,7 +78,7 @@ export async function sendWelcomeEmail(params: WelcomeEmailParams): Promise<void
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr><td align="center">
-                <a href="${FRONTEND_URL}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
+                <a href="${PORTAL_URL}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
                   Ingresar al portal
                 </a>
               </td></tr>
@@ -90,7 +93,7 @@ export async function sendWelcomeEmail(params: WelcomeEmailParams): Promise<void
           <td style="background:#f8fafc;padding:20px 40px;text-align:center;border-top:1px solid #e2e8f0;">
             <p style="color:#94a3b8;font-size:12px;margin:0;">
               © ${new Date().getFullYear()} Colegio de Diseñadores Gráficos de Misiones — 
-              <a href="${FRONTEND_URL}" style="color:#0ea5e9;text-decoration:none;">Portal de Matriculados</a>
+              <a href="${PORTAL_URL}" style="color:#0ea5e9;text-decoration:none;">Portal de Matriculados</a>
             </p>
           </td>
         </tr>
@@ -141,7 +144,7 @@ export async function sendPaymentReminderEmail(params: ReminderEmailParams): Pro
           </table>
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr><td align="center">
-              <a href="${FRONTEND_URL}" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;">
+              <a href="${PORTAL_URL}" style="display:inline-block;background:#f59e0b;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;">
                 Ir al portal y pagar
               </a>
             </td></tr>
@@ -230,5 +233,84 @@ export async function sendPasswordResetEmail(params: ResetCodeEmailParams): Prom
   } catch (err) {
     console.error('Error enviando email de recuperación:', err);
     throw err; // FIX: este sí lo propagamos — si el email falla, el front debe saberlo
+  }
+}
+
+// FIX: nueva función — email genérico para cualquier notificación del admin
+// (antes las notificaciones solo se guardaban en la DB y nunca llegaban al correo)
+interface GenericNotificationEmailParams {
+  to: string;
+  nombre: string;
+  titulo: string;
+  mensaje: string;
+  tipo?: 'info' | 'warning' | 'success' | 'error';
+}
+
+const TIPO_COLORS: Record<string, { bg: string; border: string; accent: string }> = {
+  info:    { bg: '#f0f9ff', border: '#bae6fd', accent: '#0284c7' },
+  success: { bg: '#f0fdf4', border: '#bbf7d0', accent: '#16a34a' },
+  warning: { bg: '#fff7ed', border: '#fed7aa', accent: '#f59e0b' },
+  error:   { bg: '#fef2f2', border: '#fecaca', accent: '#dc2626' },
+};
+
+export async function sendGenericNotificationEmail(params: GenericNotificationEmailParams): Promise<void> {
+  const { to, nombre, titulo, mensaje, tipo } = params;
+  const colors = TIPO_COLORS[tipo || 'info'] || TIPO_COLORS.info;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${titulo} — CDGM</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#0ea5e9;padding:32px 40px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">CDGM</h1>
+            <p style="color:#e0f2fe;margin:8px 0 0;font-size:14px;">Colegio de Diseñadores Gráficos de Misiones</p>
+          </td>
+        </tr>
+        <tr><td style="padding:40px 40px 32px;">
+          <p style="color:#1e293b;font-size:15px;margin:0 0 16px;">Hola <strong>${nombre}</strong>,</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg};border:1px solid ${colors.border};border-radius:8px;margin-bottom:8px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 8px;color:${colors.accent};font-size:17px;font-weight:700;">${titulo}</p>
+              <p style="margin:0;color:#334155;font-size:15px;line-height:1.6;white-space:pre-line;">${mensaje}</p>
+            </td></tr>
+          </table>
+          <p style="color:#94a3b8;font-size:13px;margin:24px 0 0;">
+            Podés ver todas tus notificaciones ingresando a tu panel en el Portal de Matriculados.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+            <tr><td align="center">
+              <a href="${PORTAL_URL}" style="display:inline-block;background:#0ea5e9;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;">
+                Ir al portal
+              </a>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:16px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+          <p style="color:#94a3b8;font-size:12px;margin:0;">© ${new Date().getFullYear()} CDGM</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: FROM_ADDRESS,
+      to,
+      subject: `${titulo} — CDGM`,
+      html,
+    });
+  } catch (err) {
+    console.error('Error enviando notificacion por email:', err);
   }
 }

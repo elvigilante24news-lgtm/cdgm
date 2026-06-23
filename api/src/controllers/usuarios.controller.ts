@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, CreateUsuarioInput, UpdateUsuarioInput, UpdateEstadoInput, UpdatePagoInput, UpdateFotoInput } from '../types';
 import { sendWelcomeEmail } from '../services/email.service';
+import { marcarVencidosComoDeuda } from '../lib/vencimientos'; // FIX: vencimiento automático de matrícula
 
 // Select base (sin notificaciones) — para lista del admin
 const userSelect = {
@@ -48,6 +49,8 @@ const getConfiguracion = async () => {
 
 export const listarUsuarios = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
+    await marcarVencidosComoDeuda(); // FIX: refleja vencimientos reales antes de listar
+
     const users = await prisma.user.findMany({
       select: userSelect,
       orderBy: [{ apellido: 'asc' }, { nombre: 'asc' }],
@@ -396,6 +399,39 @@ export const actualizarFoto = async (req: AuthRequest, res: Response): Promise<v
     res.status(200).json({ success: true, data: updatedUser, message: 'Foto de perfil actualizada correctamente' });
   } catch (error) {
     console.error('Error actualizando foto:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+};
+
+// FIX: nuevo — eliminar usuario definitivamente (solo admin)
+export const eliminarUsuario = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'No autenticado' });
+      return;
+    }
+
+    // Por seguridad: nadie puede eliminarse a sí mismo desde este endpoint
+    // (evita que un admin se borre por error y se quede sin acceso)
+    if (req.user.id === id) {
+      res.status(400).json({ success: false, error: 'No podés eliminar tu propio usuario' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+      return;
+    }
+
+    // Las notificaciones del usuario se eliminan en cascada (definido en el schema)
+    await prisma.user.delete({ where: { id } });
+
+    res.status(200).json({ success: true, message: 'Usuario eliminado correctamente' });
+  } catch (error) {
+    console.error('Error eliminando usuario:', error);
     res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 };

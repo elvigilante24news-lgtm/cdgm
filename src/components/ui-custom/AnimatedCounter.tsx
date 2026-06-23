@@ -19,28 +19,34 @@ export function AnimatedCounter({
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true });
-  const hasAnimated = useRef(false);
 
+  // FIX: antes, una vez animado, quedaba trabado para siempre con "hasAnimated.current = true",
+  // así que si el valor real (ej: total de usuarios) llegaba DESPUÉS de la primera animación
+  // (típico, porque la carga de datos es asíncrona y la tarjeta ya está visible en pantalla
+  // con value=0 en el primer render), el contador nunca se actualizaba — quedaba pegado en 0
+  // sin importar qué pasara después. Ahora cada cambio de "value" dispara una nueva animación
+  // desde el valor actual mostrado hacia el nuevo valor.
   useEffect(() => {
-    if (isInView && !hasAnimated.current) {
-      hasAnimated.current = true;
-      const startTime = Date.now();
-      const endValue = value;
+    if (!isInView) return;
 
-      const animate = () => {
-        const now = Date.now();
-        const progress = Math.min((now - startTime) / (duration * 1000), 1);
-        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-        const currentValue = Math.floor(easeOutQuart * endValue);
-        setCount(currentValue);
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          setCount(endValue);
-        }
-      };
-      requestAnimationFrame(animate);
-    }
+    const startValue = count;
+    const endValue = value;
+    const startTime = Date.now();
+
+    const animate = () => {
+      const now = Date.now();
+      const progress = Math.min((now - startTime) / (duration * 1000), 1);
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      const currentValue = Math.floor(startValue + easeOutQuart * (endValue - startValue));
+      setCount(currentValue);
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setCount(endValue);
+      }
+    };
+    requestAnimationFrame(animate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- "count" es solo el punto de partida, no debe re-disparar el efecto
   }, [isInView, value, duration]);
 
   return (

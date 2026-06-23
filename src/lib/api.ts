@@ -180,6 +180,10 @@ export const usersApi = {
       token
     ),
 
+  // FIX: nuevo — eliminar usuario definitivamente
+  delete: (token: string, id: string) =>
+    request<void>(`/usuarios/${id}`, { method: 'DELETE' }, token),
+
   sendNotificacion: (token: string, id: string, data: { titulo: string; mensaje: string; tipo: string; enviarEmail?: boolean }) =>
     request<any>(
       '/notificaciones',

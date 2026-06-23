@@ -7,6 +7,7 @@ import {
   actualizarEstado,
   actualizarPago,
   actualizarFoto,
+  eliminarUsuario,
 } from '../controllers/usuarios.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
@@ -33,5 +34,8 @@ router.put('/:id/pago', verifyToken, requireAdmin, actualizarPago);
 
 // PUT /api/usuarios/:id/foto - Subir foto de perfil
 router.put('/:id/foto', verifyToken, actualizarFoto);
+
+// DELETE /api/usuarios/:id - Eliminar usuario definitivamente (solo admin)
+router.delete('/:id', verifyToken, requireAdmin, eliminarUsuario);
 
 export default router;
