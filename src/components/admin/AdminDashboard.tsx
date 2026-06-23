@@ -105,7 +105,7 @@ export function AdminDashboard() {
           mensaje: `Tu matrícula venció. Por favor realizá el pago de $${configuracion.precioMatricula.toLocaleString('es-AR')}.`,
           tipo:    'warning',
           leida:   false,
-        });
+        }, true); // FIX: true = también envía el email real con Resend, no solo la notificación interna
       } else {
         await enviarNotificacion(userId, {
           titulo:  'Notificación del Colegio',

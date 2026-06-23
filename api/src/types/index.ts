@@ -19,6 +19,17 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
+// FIX: tipos para el flujo real de recuperación de contraseña
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  email: string;
+  codigo: string;
+  newPassword: string;
+}
+
 export interface CreateUsuarioInput {
   email: string;
   password: string;

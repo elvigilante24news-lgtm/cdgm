@@ -2,7 +2,8 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
-import { AuthRequest, LoginInput, ChangePasswordInput } from '../types';
+import { AuthRequest, LoginInput, ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput } from '../types';
+import { sendPasswordResetEmail } from '../services/email.service'; // FIX: recuperación de contraseña real
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const JWT_EXPIRES_IN = '7d';
@@ -172,6 +173,87 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(200).json({ success: true, message: 'Password actualizada correctamente' });
   } catch (error) {
     console.error('Error en changePassword:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+};
+
+// FIX: nuevo — paso 1 de recuperación de contraseña: genera código y lo manda por email
+export const forgotPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body as ForgotPasswordInput;
+
+    if (!email) {
+      res.status(400).json({ success: false, error: 'El email es requerido' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+
+    // Por seguridad, respondemos OK exista o no el usuario (no revelamos qué emails están registrados)
+    if (!user) {
+      res.status(200).json({ success: true, message: 'Si el email existe, se envió un código de recuperación' });
+      return;
+    }
+
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { reset_code: codigo, reset_code_expires: expires },
+    });
+
+    await sendPasswordResetEmail({ to: user.email, nombre: user.nombre, codigo });
+
+    res.status(200).json({ success: true, message: 'Si el email existe, se envió un código de recuperación' });
+  } catch (error) {
+    console.error('Error en forgotPassword:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+};
+
+// FIX: nuevo — paso 2: valida el código y actualiza la contraseña
+export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email, codigo, newPassword } = req.body as ResetPasswordInput;
+
+    if (!email || !codigo || !newPassword) {
+      res.status(400).json({ success: false, error: 'Email, codigo y newPassword son requeridos' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, error: 'La nueva password debe tener al menos 6 caracteres' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+
+    if (!user || !user.reset_code || !user.reset_code_expires) {
+      res.status(400).json({ success: false, error: 'Codigo invalido o expirado' });
+      return;
+    }
+
+    if (user.reset_code !== codigo.trim()) {
+      res.status(400).json({ success: false, error: 'Codigo invalido o expirado' });
+      return;
+    }
+
+    if (new Date() > user.reset_code_expires) {
+      res.status(400).json({ success: false, error: 'El codigo expiro. Solicita uno nuevo.' });
+      return;
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedNewPassword, reset_code: null, reset_code_expires: null },
+    });
+
+    res.status(200).json({ success: true, message: 'Password actualizada correctamente' });
+  } catch (error) {
+    console.error('Error en resetPassword:', error);
     res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 };

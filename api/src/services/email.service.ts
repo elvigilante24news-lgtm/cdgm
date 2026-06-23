@@ -167,3 +167,68 @@ export async function sendPaymentReminderEmail(params: ReminderEmailParams): Pro
     console.error('Error enviando recordatorio de pago:', err);
   }
 }
+
+// FIX: nueva función — email con el código de recuperación de contraseña
+interface ResetCodeEmailParams {
+  to: string;
+  nombre: string;
+  codigo: string;
+}
+
+export async function sendPasswordResetEmail(params: ResetCodeEmailParams): Promise<void> {
+  const { to, nombre, codigo } = params;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Recuperación de contraseña — CDGM</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#0ea5e9;padding:32px 40px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">CDGM</h1>
+            <p style="color:#e0f2fe;margin:8px 0 0;font-size:14px;">Colegio de Diseñadores Gráficos de Misiones</p>
+          </td>
+        </tr>
+        <tr><td style="padding:40px 40px 32px;">
+          <h2 style="color:#1e293b;font-size:20px;margin:0 0 16px;">Hola, ${nombre}</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+            Recibimos una solicitud para restablecer tu contraseña. Usá el siguiente código para continuar.
+            Es válido por <strong>15 minutos</strong>.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:24px;text-align:center;">
+              <span style="font-size:32px;font-weight:700;letter-spacing:8px;color:#0284c7;">${codigo}</span>
+            </td></tr>
+          </table>
+          <p style="color:#94a3b8;font-size:13px;line-height:1.5;margin:0;">
+            Si no solicitaste este cambio, podés ignorar este email — tu contraseña actual seguirá funcionando con normalidad.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:16px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+          <p style="color:#94a3b8;font-size:12px;margin:0;">© ${new Date().getFullYear()} CDGM</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: FROM_ADDRESS,
+      to,
+      subject: 'Código de recuperación de contraseña — CDGM',
+      html,
+    });
+  } catch (err) {
+    console.error('Error enviando email de recuperación:', err);
+    throw err; // FIX: este sí lo propagamos — si el email falla, el front debe saberlo
+  }
+}

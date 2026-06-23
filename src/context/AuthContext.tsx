@@ -12,9 +12,6 @@ const defaultConfig: ConfiguracionSistema = {
   fechaVencimientoPago: '2025-03-31',
 };
 
-// Almacén en memoria para códigos de recuperación (demo)
-const recoveryCodes = new Map<string, { code: string; expires: number }>();
-
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -23,10 +20,10 @@ interface AuthContextType {
   isLoading: boolean;
   updateUser: (userData: Partial<User>) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
-  solicitarRecuperacion: (email: string) => Promise<{ success: boolean; codigo?: string }>;
+  solicitarRecuperacion: (email: string) => Promise<{ success: boolean }>;
   resetPasswordConCodigo: (email: string, codigo: string, newPassword: string) => Promise<boolean>;
   marcarNotificacionLeida: (notificacionId: string) => void;
-  enviarNotificacion: (userId: string, notificacion: Omit<Notificacion, 'id' | 'fecha'>) => Promise<void>;
+  enviarNotificacion: (userId: string, notificacion: Omit<Notificacion, 'id' | 'fecha'>, enviarEmail?: boolean) => Promise<void>;
   enviarNotificacionMasiva: (notificacion: Omit<Notificacion, 'id' | 'fecha'>) => Promise<void>;
   crearUsuario: (userData: Omit<User, 'id' | 'notificaciones'> & { password: string }) => Promise<User>;
   actualizarEstadoPago: (userId: string, estado: 'al_dia' | 'deuda', montoDeuda?: number) => Promise<void>;
@@ -117,20 +114,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('cdg_user');
   };
 
-  // ── Recuperación de contraseña (demo) ─────────────────────────────────────
-  const solicitarRecuperacion = async (email: string): Promise<{ success: boolean; codigo?: string }> => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    recoveryCodes.set(email.toLowerCase(), { code, expires: Date.now() + 15 * 60 * 1000 });
-    return { success: true, codigo: code };
+  // FIX: recuperación de contraseña real — ahora llama al backend (antes era 100% simulada)
+  const solicitarRecuperacion = async (email: string): Promise<{ success: boolean }> => {
+    try {
+      await authApi.forgotPassword(email);
+      return { success: true };
+    } catch {
+      // Por seguridad el backend siempre responde OK exista o no el email,
+      // así que un error acá es de red/servidor, no de "email no encontrado"
+      return { success: false };
+    }
   };
 
   const resetPasswordConCodigo = async (
-    email: string, codigo: string, _newPassword: string
+    email: string, codigo: string, newPassword: string
   ): Promise<boolean> => {
-    const stored = recoveryCodes.get(email.toLowerCase());
-    if (!stored || stored.code !== codigo || Date.now() > stored.expires) return false;
-    recoveryCodes.delete(email.toLowerCase());
-    return true;
+    try {
+      await authApi.resetPassword(email, codigo, newPassword);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   // ── User updates ──────────────────────────────────────────────────────────
@@ -161,11 +165,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateFotoPerfil = async (fotoUrl: string) => {
     if (!user || !token) return;
     try {
-      await usersApi.update(token, user.id, { foto_perfil: fotoUrl });
+      await usersApi.updateFoto(token, user.id, fotoUrl); // FIX: antes usaba usersApi.update (ignorado por el backend)
       const updated = { ...user, fotoPerfil: fotoUrl };
       setUser(updated);
       localStorage.setItem('cdg_user', JSON.stringify(updated));
       setUsuarios(prev => prev.map(u => u.id === user.id ? updated : u));
+      toast.success('Foto de perfil actualizada');
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar foto');
     }
@@ -188,7 +193,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const enviarNotificacion = async (
     userId: string,
-    notificacion: Omit<Notificacion, 'id' | 'fecha'>
+    notificacion: Omit<Notificacion, 'id' | 'fecha'>,
+    enviarEmail?: boolean // FIX: si es true, además del registro interno se envía el email real
   ) => {
     if (!token) return;
     try {
@@ -196,8 +202,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         titulo: notificacion.titulo,
         mensaje: notificacion.mensaje,
         tipo: notificacion.tipo,
+        enviarEmail,
       });
-      toast.success('Recordatorio enviado ✓');
+      toast.success(enviarEmail ? 'Recordatorio enviado por email ✓' : 'Recordatorio enviado ✓');
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar notificación');
     }
@@ -334,10 +341,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateFotoPerfilAdmin = async (userId: string, fotoUrl: string) => {
     if (!token) return;
     try {
-      await usersApi.update(token, userId, { foto_perfil: fotoUrl });
+      await usersApi.updateFoto(token, userId, fotoUrl); // FIX: antes usaba usersApi.update (ignorado por el backend)
       setUsuarios(prev =>
         prev.map(u => u.id === userId ? { ...u, fotoPerfil: fotoUrl } : u)
       );
+      toast.success('Foto de perfil actualizada');
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar foto');
     }

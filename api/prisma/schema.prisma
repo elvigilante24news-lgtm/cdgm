@@ -31,6 +31,8 @@ model User {
   pagina_web           String?
   linkedin             String?
   behance              String?
+  reset_code           String?  // FIX: código de 6 dígitos para recuperación de contraseña
+  reset_code_expires   DateTime? // FIX: expira a los 15 minutos
   created_at           DateTime @default(now())
   updated_at           DateTime @updatedAt
 

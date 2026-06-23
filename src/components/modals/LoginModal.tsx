@@ -70,11 +70,11 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       const res = await solicitarRecuperacion(recoveryEmail);
       if (res.success) {
         toast.success('Código enviado', {
-          description: `Te enviamos un código de 6 dígitos a ${recoveryEmail}. (Demo: ${res.codigo})`,
+          description: `Si el correo ${recoveryEmail} está registrado, te enviamos un código de 6 dígitos.`,
         });
         setView('recover-code');
       } else {
-        setError('No encontramos una cuenta con ese correo.');
+        setError('Hubo un problema al enviar el código. Intentá nuevamente.');
       }
     } finally {
       setIsLoading(false);

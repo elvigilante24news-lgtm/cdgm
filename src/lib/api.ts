@@ -130,6 +130,19 @@ export const authApi = {
       { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) },
       token
     ),
+
+  // FIX: recuperación de contraseña real — antes era 100% simulada en el navegador
+  forgotPassword: (email: string) =>
+    request<void>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (email: string, codigo: string, newPassword: string) =>
+    request<void>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, codigo, newPassword }),
+    }),
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -159,7 +172,15 @@ export const usersApi = {
       token
     ),
 
-  sendNotificacion: (token: string, id: string, data: { titulo: string; mensaje: string; tipo: string }) =>
+  // FIX: la foto tiene su propio endpoint — el PUT general /usuarios/:id ignora foto_perfil
+  updateFoto: (token: string, id: string, fotoBase64: string) =>
+    request<any>(
+      `/usuarios/${id}/foto`,
+      { method: 'PUT', body: JSON.stringify({ fotoBase64 }) },
+      token
+    ),
+
+  sendNotificacion: (token: string, id: string, data: { titulo: string; mensaje: string; tipo: string; enviarEmail?: boolean }) =>
     request<any>(
       '/notificaciones',
       { method: 'POST', body: JSON.stringify({ userId: id, ...data }) },
