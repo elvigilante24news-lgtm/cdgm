@@ -14,7 +14,6 @@ function getMPClient(): MercadoPagoConfig {
 /**
  * POST /api/pagos/preferencia
  * Usuario autenticado solicita un link de pago para su matrícula.
- * Devuelve { init_point, sandbox_init_point, preference_id }
  */
 export const crearPreferencia = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -45,6 +44,8 @@ export const crearPreferencia = async (req: AuthRequest, res: Response): Promise
 
     const precio = config?.precio_matricula ?? 15000;
     const currentYear = new Date().getFullYear();
+
+    // FIX: usar query params en lugar de rutas hash (#) porque MP no soporta URLs con #
     const frontendUrl = (process.env.FRONTEND_URL || 'https://c2851498.ferozo.com').replace(/\/$/, '');
     const backendUrl  = (process.env.BACKEND_URL  || 'https://cdgm-production.up.railway.app').replace(/\/$/, '');
 
@@ -69,13 +70,13 @@ export const crearPreferencia = async (req: AuthRequest, res: Response): Promise
           email:   user.email,
         },
         external_reference: user.id,
+        // FIX: query params en lugar de rutas hash para compatibilidad con MP
         back_urls: {
-          success: `${frontendUrl}#/pago/exitoso`,
-          failure: `${frontendUrl}#/pago/fallido`,
-          pending: `${frontendUrl}#/pago/pendiente`,
+          success: `${frontendUrl}?pago=exitoso`,
+          failure: `${frontendUrl}?pago=fallido`,
+          pending: `${frontendUrl}?pago=pendiente`,
         },
         auto_return: 'approved',
-        // MP llama a este endpoint cuando se procesa un pago
         notification_url: `${backendUrl}/api/pagos/webhook`,
         statement_descriptor: 'CDGM MATRICULA',
         expires: false,
@@ -107,14 +108,12 @@ export const crearPreferencia = async (req: AuthRequest, res: Response): Promise
  * Siempre responde 200 para evitar reintentos de MP.
  */
 export const procesarWebhook = async (req: Request, res: Response): Promise<void> => {
-  // Responder inmediatamente 200 a MP para evitar reintentos
   res.status(200).json({ success: true });
 
   try {
     const { type, id: queryId } = req.query;
     const body = req.body;
 
-    // MP envía el ID del pago de distintas formas según la versión del webhook
     const paymentId =
       (type === 'payment' && queryId)
         ? String(queryId)
@@ -122,10 +121,7 @@ export const procesarWebhook = async (req: Request, res: Response): Promise<void
         ? String(body.data.id)
         : null;
 
-    if (!paymentId || (type && type !== 'payment')) {
-      // No es una notificación de pago (puede ser test o merchant_order)
-      return;
-    }
+    if (!paymentId || (type && type !== 'payment')) return;
 
     const client = getMPClient();
     const paymentClient = new Payment(client);
@@ -148,10 +144,7 @@ export const procesarWebhook = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    if (user.estado_pago === 'al_dia') {
-      // Ya fue procesado (idempotencia)
-      return;
-    }
+    if (user.estado_pago === 'al_dia') return; // idempotencia
 
     const monto = payment.transaction_amount ?? 0;
 
@@ -175,7 +168,6 @@ export const procesarWebhook = async (req: Request, res: Response): Promise<void
 
     console.log(`Webhook MP: matrícula de usuario ${userId} actualizada a al_dia (pago ${paymentId})`);
   } catch (err) {
-    // Nunca re-lanzar — ya respondimos 200
     console.error('Error procesando webhook MercadoPago:', err);
   }
 };

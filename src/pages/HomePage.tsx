@@ -28,6 +28,16 @@ export default function HomePage() {
     if (user) navigate('/dashboard');
   }, [user, navigate]);
 
+  // Detectar retorno de MercadoPago (?pago=exitoso|fallido|pendiente)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pago = params.get('pago');
+    if (pago === 'exitoso' || pago === 'fallido' || pago === 'pendiente') {
+      window.history.replaceState({}, '', window.location.pathname);
+      navigate(`/pago/${pago}`);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F0F5FF] to-white">
       <motion.nav
@@ -75,7 +85,6 @@ export default function HomePage() {
                 <Button onClick={() => setIsLoginOpen(true)} size="lg" className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white px-8">
                   {hero.primaryButtonText}<ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
-                {/* Link interno del router — funciona con HashRouter */}
                 <Link to="/directorio">
                   <Button variant="outline" size="lg" className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9] hover:text-white">
                     <Users className="w-5 h-5 mr-2" />{hero.secondaryButtonText}
