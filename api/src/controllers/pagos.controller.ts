@@ -8,12 +8,11 @@ function getMPClient(): MercadoPagoConfig {
   if (!accessToken) {
     throw new Error('MERCADOPAGO_ACCESS_TOKEN no configurado en variables de entorno');
   }
-  return new MercadoPagoConfig({ accessToken, options: { timeout: 10000 } });
+  return new MercadoPagoConfig({ accessToken, options: { timeout: 15000 } });
 }
 
 /**
  * POST /api/pagos/preferencia
- * Usuario autenticado solicita un link de pago para su matrícula.
  */
 export const crearPreferencia = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -42,46 +41,66 @@ export const crearPreferencia = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const precio = config?.precio_matricula ?? 15000;
+    // FIX: Math.round() — MP Argentina (ARS) exige entero, sin decimales
+    const precio = Math.round(config?.precio_matricula ?? 15000);
     const currentYear = new Date().getFullYear();
 
-    // FIX: usar query params en lugar de rutas hash (#) porque MP no soporta URLs con #
     const frontendUrl = (process.env.FRONTEND_URL || 'https://c2851498.ferozo.com').replace(/\/$/, '');
-    const backendUrl  = (process.env.BACKEND_URL  || 'https://cdgm-production.up.railway.app').replace(/\/$/, '');
+    const backendUrl  = (process.env.BACKEND_URL || '').replace(/\/$/, '');
 
     const client = getMPClient();
     const preferenceClient = new Preference(client);
 
-    const preferenceData = await preferenceClient.create({
-      body: {
-        items: [
-          {
-            id: `matricula-${user.id}-${currentYear}`,
-            title: `Matrícula CDGM ${currentYear}`,
-            description: 'Matrícula anual — Colegio de Diseñadores Gráficos de Misiones',
-            quantity: 1,
-            unit_price: precio,
-            currency_id: 'ARS',
-          },
-        ],
-        payer: {
-          name:    user.nombre,
-          surname: user.apellido,
-          email:   user.email,
+    // FIX: notification_url SOLO si BACKEND_URL está bien configurado
+    // Si apunta a una URL muerta, MP rechaza el checkout en producción
+    const notificationUrl = backendUrl
+      ? `${backendUrl}/api/pagos/webhook`
+      : undefined;
+
+    if (notificationUrl) {
+      console.log(`MP: notification_url = ${notificationUrl}`);
+    } else {
+      console.warn('MP: BACKEND_URL no configurado — webhook desactivado para esta preferencia');
+    }
+
+    const preferenceBody: any = {
+      items: [
+        {
+          id: `matricula-${user.id}-${currentYear}`,
+          title: `Matrícula CDGM ${currentYear}`,
+          description: 'Matrícula anual — Colegio de Diseñadores Gráficos de Misiones',
+          quantity: 1,
+          unit_price: precio,
+          currency_id: 'ARS',
         },
-        external_reference: user.id,
-        // FIX: query params en lugar de rutas hash para compatibilidad con MP
-        back_urls: {
-          success: `${frontendUrl}?pago=exitoso`,
-          failure: `${frontendUrl}?pago=fallido`,
-          pending: `${frontendUrl}?pago=pendiente`,
-        },
-        auto_return: 'approved',
-        notification_url: `${backendUrl}/api/pagos/webhook`,
-        statement_descriptor: 'CDGM MATRICULA',
-        expires: false,
+      ],
+      payer: {
+        name:    user.nombre,
+        surname: user.apellido,
+        email:   user.email,
       },
-    });
+      external_reference: user.id,
+      // back_urls con query params (sin #) para compatibilidad con MP
+      back_urls: {
+        success: `${frontendUrl}?pago=exitoso`,
+        failure: `${frontendUrl}?pago=fallido`,
+        pending: `${frontendUrl}?pago=pendiente`,
+      },
+      auto_return: 'approved',
+      statement_descriptor: 'CDGM MATRICULA',
+      expires: false,
+    };
+
+    // Solo añadir notification_url si tenemos una URL válida
+    if (notificationUrl) {
+      preferenceBody.notification_url = notificationUrl;
+    }
+
+    console.log(`MP: creando preferencia para usuario ${user.id}, precio ARS $${precio}`);
+
+    const preferenceData = await preferenceClient.create({ body: preferenceBody });
+
+    console.log(`MP: preferencia creada OK — id: ${preferenceData.id}`);
 
     res.status(200).json({
       success: true,
@@ -92,7 +111,12 @@ export const crearPreferencia = async (req: AuthRequest, res: Response): Promise
       },
     });
   } catch (error: any) {
-    console.error('Error creando preferencia MercadoPago:', error);
+    // FIX: loguear el error COMPLETO de MP para poder diagnosticar
+    console.error('Error creando preferencia MercadoPago:', JSON.stringify(error, null, 2));
+
+    const mpError = error?.cause ?? error?.message ?? 'Error desconocido';
+    console.error('Detalle MP:', mpError);
+
     res.status(500).json({
       success: false,
       error: error.message?.includes('MERCADOPAGO_ACCESS_TOKEN')
