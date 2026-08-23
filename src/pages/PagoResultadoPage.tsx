@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/AuthContext';
 
 type ResultadoType = 'exitoso' | 'fallido' | 'pendiente';
 
@@ -22,9 +23,8 @@ const contenido: Record<ResultadoType, {
     bgColor: 'from-emerald-50 to-emerald-100/40',
     borderColor: 'border-emerald-200',
     titulo: '¡Pago realizado exitosamente!',
-    descripcion:
-      'Tu pago fue procesado y tu matrícula será actualizada en los próximos minutos. Recibirás una notificación cuando se acredite.',
-    extra: 'Tu tarjeta aparecerá en el directorio de matriculados una vez que el pago sea confirmado.',
+    descripcion: 'Tu pago fue procesado. Tu matrícula se está actualizando...',
+    extra: 'Tu tarjeta aparecerá en el directorio de matriculados en unos instantes.',
     btnLabel: 'Ir al panel',
   },
   fallido: {
@@ -33,8 +33,7 @@ const contenido: Record<ResultadoType, {
     bgColor: 'from-red-50 to-red-100/40',
     borderColor: 'border-red-200',
     titulo: 'El pago no pudo procesarse',
-    descripcion:
-      'Hubo un problema con el pago. Podés intentarlo nuevamente desde tu panel de usuario.',
+    descripcion: 'Hubo un problema con el pago. Podés intentarlo nuevamente desde tu panel de usuario.',
     extra: 'Si el problema persiste, contactá al administrador del CDGM.',
     btnLabel: 'Volver al panel',
   },
@@ -44,25 +43,42 @@ const contenido: Record<ResultadoType, {
     bgColor: 'from-amber-50 to-amber-100/40',
     borderColor: 'border-amber-200',
     titulo: 'Pago en proceso',
-    descripcion:
-      'Tu pago está siendo verificado. Este proceso puede tardar unos minutos. Recibirás una notificación cuando se confirme.',
+    descripcion: 'Tu pago está siendo verificado. Recibirás una notificación cuando se confirme.',
     extra: 'No realices otro pago hasta que este sea confirmado o rechazado.',
     btnLabel: 'Ir al panel',
   },
 };
 
 export default function PagoResultadoPage() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const [seconds, setSeconds] = useState(8);
+  const navigate   = useNavigate();
+  const location   = useLocation();
+  const { refreshUser } = useAuth();
+  const [seconds, setSeconds]       = useState(10);
+  const refreshCount = useRef(0);
 
-  // Detectar el resultado desde la ruta: #/pago/exitoso, #/pago/fallido, #/pago/pendiente
-  const pathParts  = location.pathname.split('/');
-  const resultado  = (pathParts[pathParts.length - 1] as ResultadoType) || 'fallido';
-  const config     = contenido[resultado] ?? contenido.fallido;
-  const Icon       = config.icon;
+  const pathParts = location.pathname.split('/');
+  const resultado = (pathParts[pathParts.length - 1] as ResultadoType) || 'fallido';
+  const config    = contenido[resultado] ?? contenido.fallido;
+  const Icon      = config.icon;
 
-  // Redirigir automáticamente al dashboard después de N segundos
+  // Si el pago fue exitoso, intentar refrescar el usuario cada 2s (max 4 intentos)
+  // para que cuando llegue al dashboard ya vea el estado actualizado
+  useEffect(() => {
+    if (resultado !== 'exitoso') return;
+
+    const tryRefresh = async () => {
+      if (refreshCount.current >= 4) return;
+      refreshCount.current += 1;
+      await refreshUser();
+    };
+
+    // Primer intento inmediato, luego cada 2s
+    tryRefresh();
+    const interval = setInterval(tryRefresh, 2000);
+    return () => clearInterval(interval);
+  }, [resultado]);
+
+  // Countdown y redirección al dashboard
   useEffect(() => {
     if (seconds <= 0) {
       navigate('/dashboard', { replace: true });

@@ -37,6 +37,8 @@ interface AuthContextType {
   updateFotoPerfil: (fotoUrl: string) => void;
   updateUsuarioAdmin: (userId: string, userData: Partial<User>) => Promise<void>;
   updateFotoPerfilAdmin: (userId: string, fotoUrl: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
+  refreshUsuarios: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -388,6 +390,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getUsuariosAlDia = () =>
     usuarios.filter(u => u.tipo === 'matriculado' && u.estadoPago === 'al_dia');
 
+  // Recarga la lista de usuarios del admin
+  const refreshUsuarios = async () => {
+    if (!token) return;
+    try {
+      const rawUsers = await usersApi.getAll(token);
+      setUsuarios(rawUsers.map(mapUser));
+    } catch (err) {
+      console.error('Error recargando usuarios:', err);
+    }
+  };
+
+  // Refresca el usuario desde la API (necesario tras volver de MercadoPago)
+  const refreshUser = async () => {
+    const storedToken = token || localStorage.getItem('cdg_token');
+    if (!storedToken) return;
+    try {
+      const rawUser = await authApi.me(storedToken);
+      const mapped = mapUser(rawUser);
+      setUser(mapped);
+      localStorage.setItem('cdg_user', JSON.stringify(mapped));
+    } catch (err) {
+      console.error('Error refrescando usuario:', err);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -403,6 +430,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         configuracion, updateConfiguracion,
         getUsuariosMatriculados, getUsuariosAlDia,
         updateFotoPerfil, updateUsuarioAdmin, updateFotoPerfilAdmin,
+        refreshUser,
+        refreshUsuarios,
       }}
     >
       {children}

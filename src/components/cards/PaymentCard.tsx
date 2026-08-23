@@ -11,7 +11,7 @@ interface PaymentCardProps {
 }
 
 export function PaymentCard({ user }: PaymentCardProps) {
-  const { iniciarPagoMercadoPago, configuracion } = useAuth();
+  const { iniciarPagoMercadoPago } = useAuth();
   const [isPaying, setIsPaying] = useState(false);
 
   const handlePago = async () => {
@@ -115,11 +115,6 @@ export function PaymentCard({ user }: PaymentCardProps) {
         </motion.div>
       )}
 
-      <div className="mt-4 pt-4 border-t border-gray-200/50">
-        <p className="text-gray-500 text-xs">
-          Monto anual: ${configuracion.precioMatricula.toLocaleString('es-AR')}
-        </p>
-      </div>
     </motion.div>
   );
 }

@@ -18,13 +18,47 @@ import { SecureBadge } from '@/components/ui-custom/SecureBadge';
 import { LogoutConfirmModal } from '@/components/modals/LogoutConfirmModal';
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
     if (!user) navigate('/');
   }, [user, navigate]);
+
+  // Refresh inteligente: polling si viene de un pago exitoso en MP,
+  // refresh simple en visita normal
+  useEffect(() => {
+    const pagoReciente = sessionStorage.getItem('cdgm_pago_reciente');
+
+    if (pagoReciente) {
+      // Viene de MercadoPago — limpiar flag y hacer polling
+      // El webhook de MP puede tardar hasta ~15s en procesar
+      sessionStorage.removeItem('cdgm_pago_reciente');
+      let intentos = 0;
+      const MAX_INTENTOS = 8;
+
+      const intentarRefresh = async () => {
+        await refreshUser();
+        intentos++;
+      };
+
+      // Primer intento inmediato
+      intentarRefresh();
+
+      // Luego cada 3 segundos — 8 intentos = 24 segundos de cobertura total
+      const intervalo = setInterval(async () => {
+        await intentarRefresh();
+        if (intentos >= MAX_INTENTOS) clearInterval(intervalo);
+      }, 3000);
+
+      return () => clearInterval(intervalo);
+    } else {
+      // Visita normal — un solo refresh para traer datos actualizados
+      refreshUser();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!user) return null;
 

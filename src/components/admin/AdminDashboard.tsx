@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, DollarSign, Settings, Search, Plus, Bell, CheckCircle,
-  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit, Loader2, Trash2,
+  TrendingUp, UserCheck, UserX, Ban, Power, Edit, FileEdit, Loader2, RefreshCw, Trash2,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -87,6 +87,7 @@ export function AdminDashboard() {
   const [notifMensaje, setNotifMensaje] = useState('');
   const [notifTipo, setNotifTipo]       = useState<'info' | 'warning' | 'success'>('info');
   const [enviandoMasiva, setEnviandoMasiva] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   // id del usuario cuyo recordatorio individual está en vuelo
   const [sendingBellId, setSendingBellId]   = useState<string | null>(null);
 
@@ -233,7 +234,16 @@ export function AdminDashboard() {
                 className="pl-10"
               />
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => { setIsRefreshing(true); await refreshUsuarios(); setIsRefreshing(false); }}
+                disabled={isRefreshing}
+                title="Recargar lista"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white">
                   <Plus className="w-4 h-4 mr-2" />Nuevo Usuario
@@ -265,6 +275,7 @@ export function AdminDashboard() {
                 </Button>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg shadow-gray-100 border border-gray-100 overflow-hidden">

@@ -21,7 +21,7 @@ const accessItems: Array<{
   action: AccessAction;
 }> = [
   { icon: Users,      label: 'Directorio de Profesionales', description: 'Ver colegas matriculados',         color: 'bg-sky-50 text-[#0284c7]',    action: { kind: 'route', to: '/directorio' } },
-  { icon: FileText,   label: 'Tarifario',                   description: 'Consultar tarifas de referencia',  color: 'bg-emerald-50 text-emerald-600', action: { kind: 'external', href: 'https://tarifario-cdgm-fb81aaf4.vercel.app/' } },
+  { icon: FileText,   label: 'Tarifario',                   description: 'Consultar tarifas de referencia',  color: 'bg-emerald-50 text-emerald-600', action: { kind: 'external', href: 'https://cdgm.org.ar/tarifario-publico/' } },
   { icon: HelpCircle, label: 'Ayuda y Soporte',              description: 'Preguntas frecuentes',             color: 'bg-amber-50 text-amber-600',  action: { kind: 'soon' } },
   { icon: Settings,   label: 'Configuración',                description: 'Gestionar tu cuenta',              color: 'bg-purple-50 text-purple-600', action: { kind: 'anchor', id: 'datos-personales' } },
 ];

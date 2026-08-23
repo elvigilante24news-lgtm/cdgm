@@ -34,6 +34,8 @@ export default function HomePage() {
     const pago = params.get('pago');
     if (pago === 'exitoso' || pago === 'fallido' || pago === 'pendiente') {
       window.history.replaceState({}, '', window.location.pathname);
+      // Marcar en sessionStorage para que DashboardPage haga polling
+      if (pago === 'exitoso') sessionStorage.setItem('cdgm_pago_reciente', 'true');
       navigate(`/pago/${pago}`);
     }
   }, []);
