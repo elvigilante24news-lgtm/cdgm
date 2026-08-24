@@ -88,7 +88,7 @@ export const crearNotificacion = async (req: AuthRequest, res: Response): Promis
         apellido: user.apellido,
         montoDeuda: user.monto_deuda ?? 0,
         fechaVencimiento: user.fecha_vencimiento,
-      }).catch((err) => console.error('Email de recordatorio falló:', err));
+      }).catch((err: any) => console.error('Email de recordatorio falló:', err));
     }
 
     res.status(201).json({ success: true, data: notificacion, message: 'Notificacion enviada correctamente' });
@@ -136,7 +136,7 @@ export const crearNotificacionMasiva = async (req: AuthRequest, res: Response): 
         titulo: titulo.trim(),
         mensaje: mensaje.trim(),
         tipo: (tipo || 'info') as 'info' | 'warning' | 'success' | 'error',
-      }).catch((err) => console.error(`Email de notificacion masiva falló para ${u.email}:`, err));
+      }).catch((err: any) => console.error(`Email de notificacion masiva falló para ${u.email}:`, err));
     });
 
     res.status(201).json({
