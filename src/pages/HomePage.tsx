@@ -132,8 +132,7 @@ export default function HomePage() {
           </div>
           <div>
             <h4 className="font-semibold mb-4 text-secondary-foreground">Contacto</h4>
-            <p className="text-sm text-secondary-foreground">{footer.email}</p>
-            <p className="text-sm mt-1 text-secondary-foreground">{footer.direccion}</p>
+            <p className="text-sm text-secondary-foreground">contacto@colegiodgmisiones.com</p>
           </div>
           <div className="text-secondary-foreground">
             <p className="text-sm">© 2026 Colegio de Diseñadores Gráficos de Misiones. Todos los derechos reservados.</p>

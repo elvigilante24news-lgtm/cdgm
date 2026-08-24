@@ -101,9 +101,8 @@ async function main() {
             { value: "50+", label: "Eventos Realizados" }
           ],
           footer: {
-            direccion: "Av. Lavalle 1234, Posadas, Misiones",
             telefono: "+54 376 412-3456",
-            email: "contacto@colegiodg.com",
+            email: "colegiodgmisiones@gmail.com",
             horario: "Lunes a Viernes: 9:00 - 17:00",
             copyright: "Colegio de Disenadores Graficos de Misiones. Todos los derechos reservados."
           }

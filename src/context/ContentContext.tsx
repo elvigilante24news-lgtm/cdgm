@@ -12,7 +12,7 @@ export interface HomeContent {
     profesionales: { title: string; subtitle: string };
     tarifario: { title: string; subtitle: string };
   };
-  footer: { description: string; email: string; direccion: string };
+  footer: { description: string; email: string;};
 }
 
 export interface DashboardContent {
@@ -56,7 +56,6 @@ const defaultHomeContent: HomeContent = {
   footer: {
     description: 'Representando y regulando la actividad del diseño gráfico en la provincia de Misiones.',
     email: 'contacto@colegiodgmisiones.org',
-    direccion: 'Posadas, Misiones, Argentina',
   },
 };
 
